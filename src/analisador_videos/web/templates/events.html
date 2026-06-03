@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}Eventos{% endblock %}
+{% block content %}
+<h1>Galeria de eventos</h1>
+<form class="row g-2 mb-4" method="get">
+  <div class="col-auto">
+    <select name="video_id" class="form-select">
+      <option value="">Todos os vídeos</option>
+      {% for v in videos %}
+      <option value="{{ v.id }}" {% if filters.video_id == v.id %}selected{% endif %}>{{ v.filename }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="col-auto">
+    <select name="class" class="form-select">
+      <option value="">Todas as classes</option>
+      {% for c in classes %}
+      <option value="{{ c }}" {% if filters.class_name == c %}selected{% endif %}>{{ c }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="col-auto"><input type="number" step="0.1" name="from" class="form-control" placeholder="De (s)" value="{{ filters.time_from or '' }}"></div>
+  <div class="col-auto"><input type="number" step="0.1" name="to" class="form-control" placeholder="Até (s)" value="{{ filters.time_to or '' }}"></div>
+  <div class="col-auto"><button class="btn btn-primary" type="submit">Filtrar</button></div>
+</form>
+
+{% if filters.video_id %}
+<form class="mb-3 d-flex gap-2" action="/web/supercut/{{ filters.video_id }}" method="post">
+  <select name="class_name" class="form-select w-auto">
+    <option value="">Supercut completo</option>
+    {% for c in classes %}
+    <option value="{{ c }}">Só {{ c }}</option>
+    {% endfor %}
+  </select>
+  <button class="btn btn-outline-secondary" type="submit">Gerar supercut</button>
+  <a class="btn btn-outline-primary" href="/videos/{{ filters.video_id }}/reports/pdf">PDF</a>
+  <a class="btn btn-outline-primary" href="/videos/{{ filters.video_id }}/reports/json">JSON</a>
+  <a class="btn btn-outline-primary" href="/videos/{{ filters.video_id }}/reports/csv">CSV</a>
+</form>
+{% endif %}
+
+<div class="row row-cols-1 row-cols-md-3 g-3">
+{% for e in events %}
+  <div class="col">
+    <div class="card h-100">
+      {% if e.thumbnail_path %}
+      <img src="/media/{{ e.thumbnail_path }}" class="card-img-top" alt="thumb">
+      {% endif %}
+      <div class="card-body">
+        <span class="badge bg-info">{{ e.class_name }}</span>
+        <p class="small mb-1">Vídeo #{{ e.video_id }}</p>
+        <p class="small">{{ "%.1f"|format(e.start_time_raw_sec) }}s — {{ "%.1f"|format(e.end_time_sec) }}s</p>
+        <a href="/events/{{ e.id }}" class="btn btn-sm btn-primary">Detalhe</a>
+      </div>
+    </div>
+  </div>
+{% else %}
+  <p class="text-muted">Nenhum evento encontrado.</p>
+{% endfor %}
+</div>
+{% endblock %}

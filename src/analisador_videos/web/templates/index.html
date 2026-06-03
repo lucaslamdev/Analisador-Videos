@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}Início — Analisador{% endblock %}
+{% block content %}
+<h1 class="mb-4">Processar vídeos</h1>
+<div class="row g-4">
+  <div class="col-md-6">
+    <div class="card">
+      <div class="card-body">
+        <h5 class="card-title">Upload MP4</h5>
+        <form action="/web/upload" method="post" enctype="multipart/form-data">
+          <input class="form-control mb-2" type="file" name="file" accept=".mp4" required>
+          <button class="btn btn-primary" type="submit">Enviar e processar</button>
+        </form>
+        <p class="text-muted small mt-2">Use a API <code>POST /process</code> para jobs assíncronos.</p>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-6">
+    <div class="card">
+      <div class="card-body">
+        <h5 class="card-title">Pasta de entrada</h5>
+        <p class="small">Coloque MP4 em <code>incoming/</code> e processe em lote.</p>
+        <form action="/web/process-folder" method="post">
+          <button class="btn btn-secondary" type="submit">Processar pasta</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<h2 class="mt-5">Jobs recentes</h2>
+<table class="table table-sm">
+  <thead><tr><th>ID</th><th>Vídeo</th><th>Status</th><th>%</th><th>Etapa</th></tr></thead>
+  <tbody>
+  {% for job in jobs %}
+    <tr>
+      <td><a href="/status/{{ job.id }}">{{ job.id[:8] }}…</a></td>
+      <td>{{ job.video_id }}</td>
+      <td>{{ job.status }}</td>
+      <td>{{ job.progress_pct }}</td>
+      <td>{{ job.stage or '—' }}</td>
+    </tr>
+  {% else %}
+    <tr><td colspan="5" class="text-muted">Nenhum job ainda.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+
+<h2 class="mt-4">Vídeos</h2>
+<ul class="list-group">
+  {% for v in videos %}
+  <li class="list-group-item d-flex justify-content-between">
+    <span>{{ v.filename }} <span class="badge bg-secondary">{{ v.status }}</span></span>
+    <a href="/events?video_id={{ v.id }}">Eventos</a>
+  </li>
+  {% else %}
+  <li class="list-group-item text-muted">Nenhum vídeo.</li>
+  {% endfor %}
+</ul>
+{% endblock %}
