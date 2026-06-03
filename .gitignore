@@ -16,6 +16,8 @@ incoming/
 # IDE / OS
 .idea/
 .vscode/
+.cursor/
+.pytest_cache/
 *.swp
 .DS_Thumbs.db
 

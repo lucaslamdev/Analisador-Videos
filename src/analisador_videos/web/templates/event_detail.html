@@ -2,19 +2,27 @@
 {% block title %}Evento {{ event.id }}{% endblock %}
 {% block content %}
 <h1>Evento #{{ event.id }}</h1>
-<p><span class="badge bg-info">{{ event.class_name }}</span> — Vídeo: {{ video.filename if video else event.video_id }}</p>
+<p>
+  <span class="badge bg-info">{{ event.class_name }}</span>
+  — Vídeo: {{ video.filename if video else event.video_id }}
+  {% if batch %}<span class="badge bg-secondary ms-2"><a class="text-white text-decoration-none" href="/lotes/{{ batch.slug }}">{{ batch.slug }}</a></span>{% endif %}
+</p>
 <p>Intervalo (com padding): {{ "%.2f"|format(event.start_time_sec) }}s — {{ "%.2f"|format(event.end_time_sec) }}s</p>
+{% if event.detection_time_sec is not none %}
+<p>Horário da detecção: <strong>{{ "%.2f"|format(event.detection_time_sec) }}s</strong></p>
+{% endif %}
+<p>Início bruto (track): {{ "%.2f"|format(event.start_time_raw_sec) }}s</p>
 <p>Tracks fundidos: <code>{{ event.merged_track_ids }}</code></p>
 <p>Confiança média: {{ "%.2f"|format(event.avg_confidence) }}</p>
 
 {% if event.snapshot_path %}
-<h3>Snapshot</h3>
+<h3>Snapshot (com bbox)</h3>
 <img src="/media/{{ event.snapshot_path }}" class="img-fluid mb-3" alt="snapshot">
 {% endif %}
 
 {% if event.clip_path %}
 <h3>Clipe</h3>
-<video src="/media/{{ event.clip_path }}" controls class="w-100"></video>
+<video src="/media/{{ event.clip_path }}" controls class="w-100 mb-3"></video>
 {% endif %}
 
 <a href="/events?video_id={{ event.video_id }}" class="btn btn-link mt-3">← Voltar</a>

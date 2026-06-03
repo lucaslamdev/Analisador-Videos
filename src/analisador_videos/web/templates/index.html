@@ -19,29 +19,39 @@
     <div class="card">
       <div class="card-body">
         <h5 class="card-title">Pasta de entrada</h5>
-        <p class="small">Coloque MP4 em <code>incoming/</code> e processe em lote.</p>
+        <p class="small">Coloque MP4 em <code>incoming/</code> — um lote do dia é criado automaticamente.</p>
         <form action="/web/process-folder" method="post">
-          <button class="btn btn-secondary" type="submit">Processar pasta</button>
+          <button class="btn btn-secondary" type="submit">Processar pasta (lote)</button>
         </form>
       </div>
     </div>
   </div>
 </div>
 
-<h2 class="mt-5">Jobs recentes</h2>
+{% if lotes %}
+<h2 class="mt-5">Lotes recentes</h2>
+<ul class="list-group mb-4">
+  {% for l in lotes %}
+  <li class="list-group-item"><a href="/lotes/{{ l.slug }}">{{ l.slug }}</a></li>
+  {% endfor %}
+</ul>
+{% endif %}
+
+<h2 class="mt-4">Jobs recentes</h2>
 <table class="table table-sm">
-  <thead><tr><th>ID</th><th>Vídeo</th><th>Status</th><th>%</th><th>Etapa</th></tr></thead>
+  <thead><tr><th>ID</th><th>Vídeo</th><th>Lote</th><th>Status</th><th>%</th><th>Etapa</th></tr></thead>
   <tbody>
   {% for job in jobs %}
     <tr>
       <td><a href="/status/{{ job.id }}">{{ job.id[:8] }}…</a></td>
       <td>{{ job.video_id }}</td>
+      <td>{% if job.batch_id and batches.get(job.batch_id) %}{{ batches[job.batch_id].slug }}{% else %}—{% endif %}</td>
       <td>{{ job.status }}</td>
-      <td>{{ job.progress_pct }}</td>
+      <td>{{ job.progress_pct }}{% if job.frames_total %} ({{ job.frames_done or 0 }}/{{ job.frames_total }}){% endif %}</td>
       <td>{{ job.stage or '—' }}</td>
     </tr>
   {% else %}
-    <tr><td colspan="5" class="text-muted">Nenhum job ainda.</td></tr>
+    <tr><td colspan="6" class="text-muted">Nenhum job ainda.</td></tr>
   {% endfor %}
   </tbody>
 </table>

@@ -13,6 +13,8 @@ class TrackSegment:
     start_cx: float
     start_cy: float
     avg_confidence: float
+    best_bbox: tuple[float, float, float, float] | None = None
+    detection_time_sec: float | None = None
 
 
 @dataclass
@@ -22,6 +24,8 @@ class MergedEvent:
     end_time_sec: float
     merged_track_ids: list[int]
     avg_confidence: float
+    best_bbox: tuple[float, float, float, float] | None = None
+    detection_time_sec: float | None = None
 
 
 def _spatial_distance(ax: float, ay: float, bx: float, by: float) -> float:
@@ -77,6 +81,8 @@ def merge_tracks(
                     end_time_sec=end,
                     merged_track_ids=current_ids.copy(),
                     avg_confidence=sum(confidences) / len(confidences),
+                    best_bbox=prev.best_bbox,
+                    detection_time_sec=prev.detection_time_sec,
                 )
             )
             current_ids = [curr.track_id]
@@ -93,6 +99,8 @@ def merge_tracks(
             end_time_sec=end,
             merged_track_ids=current_ids,
             avg_confidence=sum(confidences) / len(confidences),
+            best_bbox=prev.best_bbox,
+            detection_time_sec=prev.detection_time_sec,
         )
     )
     return events

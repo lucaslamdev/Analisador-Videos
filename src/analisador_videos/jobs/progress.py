@@ -13,6 +13,8 @@ def update_job(
     progress_pct: int | None = None,
     stage: str | None = None,
     error_message: str | None = None,
+    frames_done: int | None = None,
+    frames_total: int | None = None,
 ) -> None:
     job = db.get(Job, job_id)
     if not job:
@@ -25,6 +27,10 @@ def update_job(
         job.stage = stage
     if error_message is not None:
         job.error_message = error_message
+    if frames_done is not None:
+        job.frames_done = frames_done
+    if frames_total is not None:
+        job.frames_total = frames_total
     if status in ("done", "failed"):
         job.finished_at = datetime.utcnow()
     db.commit()

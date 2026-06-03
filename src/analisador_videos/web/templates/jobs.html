@@ -4,18 +4,28 @@
 <h1>Jobs</h1>
 <table class="table">
   <thead>
-    <tr><th>ID</th><th>Vídeo</th><th>Status</th><th>Progresso</th><th>Etapa</th><th>Erro</th></tr>
+    <tr><th>ID</th><th>Vídeo</th><th>Lote</th><th>Status</th><th>Progresso</th><th>Frames</th><th>Etapa</th><th>Erro</th></tr>
   </thead>
   <tbody>
   {% for job in jobs %}
     <tr>
-      <td><code>{{ job.id }}</code></td>
+      <td><code>{{ job.id[:8] }}…</code></td>
       <td>{{ job.video_id }}</td>
+      <td>
+        {% if job.batch_id and batches.get(job.batch_id) %}
+        <a href="/lotes/{{ batches[job.batch_id].slug }}">{{ batches[job.batch_id].slug }}</a>
+        {% else %}—{% endif %}
+      </td>
       <td>{{ job.status }}</td>
       <td>
         <div class="progress" style="height:20px">
           <div class="progress-bar" style="width:{{ job.progress_pct }}%">{{ job.progress_pct }}%</div>
         </div>
+      </td>
+      <td class="small">
+        {% if job.frames_total %}
+        {{ job.frames_done or 0 }}/{{ job.frames_total }}
+        {% else %}—{% endif %}
       </td>
       <td>{{ job.stage or '—' }}</td>
       <td class="text-danger small">{{ job.error_message or '' }}</td>

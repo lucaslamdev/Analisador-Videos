@@ -3,7 +3,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from analisador_videos.db.database import get_db
-from analisador_videos.db.models import Event
+from analisador_videos.db.models import Event, Video
+from analisador_videos.ingest.batch_service import get_batch_by_slug
 
 router = APIRouter(tags=["events"])
 
@@ -21,15 +22,16 @@ def _event_dict(e: Event) -> dict:
         "snapshot_path": e.snapshot_path,
         "clip_path": e.clip_path,
         "thumbnail_path": e.thumbnail_path,
+        "detection_time_sec": e.detection_time_sec,
+        "bbox_json": e.bbox_json,
     }
 
 
 @router.get("/events")
 def list_events(
     video_id: int | None = None,
+    batch: str | None = None,
     class_name: str | None = Query(None, alias="class"),
-    time_from: float | None = Query(None, alias="from"),
-    time_to: float | None = Query(None, alias="to"),
     offset: int = 0,
     limit: int = 50,
     db: Session = Depends(get_db),
@@ -39,10 +41,18 @@ def list_events(
         q = q.where(Event.video_id == video_id)
     if class_name:
         q = q.where(Event.class_name == class_name)
-    if time_from is not None:
-        q = q.where(Event.start_time_sec >= time_from)
-    if time_to is not None:
-        q = q.where(Event.end_time_sec <= time_to)
+    if batch:
+        b = get_batch_by_slug(db, batch)
+        if not b:
+            raise HTTPException(404, f"Lote não encontrado: {batch}")
+        video_ids = [
+            v.id
+            for v in db.scalars(select(Video).where(Video.batch_id == b.id))
+        ]
+        if video_ids:
+            q = q.where(Event.video_id.in_(video_ids))
+        else:
+            q = q.where(Event.video_id == -1)
     rows = db.scalars(q.offset(offset).limit(limit)).all()
     return {"items": [_event_dict(e) for e in rows], "offset": offset, "limit": limit}
 

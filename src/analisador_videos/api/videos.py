@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from analisador_videos.db.database import get_db
 from analisador_videos.db.models import Artifact, Video
 from analisador_videos.pipeline.runner import build_supercut_for_video
+from analisador_videos.reports.service import ensure_video_report
 
 router = APIRouter(tags=["videos"])
 
@@ -82,15 +83,19 @@ def download_report(video_id: int, format: str, db: Session = Depends(get_db)):
             Artifact.type == type_map[format],
         )
     )
-    if not artifact or not Path(artifact.path).is_file():
-        raise HTTPException(404, "Relatório não encontrado")
+    video = db.get(Video, video_id)
+    if not video:
+        raise HTTPException(404, "Vídeo não encontrado")
+    path = Path(artifact.path) if artifact else None
+    if not path or not path.is_file():
+        path = ensure_video_report(db, video, format)
     media = {
         "json": "application/json",
         "csv": "text/csv",
         "pdf": "application/pdf",
     }
     return FileResponse(
-        artifact.path,
+        path,
         media_type=media[format],
-        filename=Path(artifact.path).name,
+        filename=path.name,
     )

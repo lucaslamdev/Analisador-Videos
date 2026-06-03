@@ -4,7 +4,8 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 
-from analisador_videos.api import events, process, status, videos
+from analisador_videos.api import batches, events, process, status, videos
+from analisador_videos.pipeline.compute import health_info
 from analisador_videos.config import settings
 from analisador_videos.db.init_db import create_tables
 from analisador_videos.web.router import router as web_router
@@ -31,11 +32,12 @@ app.include_router(process.router)
 app.include_router(status.router)
 app.include_router(events.router)
 app.include_router(videos.router)
+app.include_router(batches.router)
 
 
 @app.get("/health")
 def health():
-    return {"status": "ok"}
+    return {"status": "ok", **health_info()}
 
 
 @app.get("/media/{media_path:path}")

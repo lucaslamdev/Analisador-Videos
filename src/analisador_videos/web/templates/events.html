@@ -4,6 +4,14 @@
 <h1>Galeria de eventos</h1>
 <form class="row g-2 mb-4" method="get">
   <div class="col-auto">
+    <select name="batch" class="form-select">
+      <option value="">Todos os lotes</option>
+      {% for l in lotes %}
+      <option value="{{ l.slug }}" {% if filters.batch == l.slug %}selected{% endif %}>{{ l.slug }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="col-auto">
     <select name="video_id" class="form-select">
       <option value="">Todos os vídeos</option>
       {% for v in videos %}
@@ -19,13 +27,11 @@
       {% endfor %}
     </select>
   </div>
-  <div class="col-auto"><input type="number" step="0.1" name="from" class="form-control" placeholder="De (s)" value="{{ filters.time_from or '' }}"></div>
-  <div class="col-auto"><input type="number" step="0.1" name="to" class="form-control" placeholder="Até (s)" value="{{ filters.time_to or '' }}"></div>
   <div class="col-auto"><button class="btn btn-primary" type="submit">Filtrar</button></div>
 </form>
 
 {% if filters.video_id %}
-<form class="mb-3 d-flex gap-2" action="/web/supercut/{{ filters.video_id }}" method="post">
+<form class="mb-3 d-flex gap-2 flex-wrap" action="/web/supercut/{{ filters.video_id }}" method="post">
   <select name="class_name" class="form-select w-auto">
     <option value="">Supercut completo</option>
     {% for c in classes %}
@@ -49,6 +55,9 @@
       <div class="card-body">
         <span class="badge bg-info">{{ e.class_name }}</span>
         <p class="small mb-1">Vídeo #{{ e.video_id }}</p>
+        {% if e.detection_time_sec is not none %}
+        <p class="small">Detecção: {{ "%.1f"|format(e.detection_time_sec) }}s</p>
+        {% endif %}
         <p class="small">{{ "%.1f"|format(e.start_time_raw_sec) }}s — {{ "%.1f"|format(e.end_time_sec) }}s</p>
         <a href="/events/{{ e.id }}" class="btn btn-sm btn-primary">Detalhe</a>
       </div>

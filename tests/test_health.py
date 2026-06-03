@@ -7,4 +7,7 @@ def test_health():
     client = TestClient(app)
     r = client.get("/health")
     assert r.status_code == 200
-    assert r.json() == {"status": "ok"}
+    data = r.json()
+    assert data["status"] == "ok"
+    assert "backend" in data
+    assert "sample_fps" in data

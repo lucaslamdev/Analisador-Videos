@@ -31,14 +31,34 @@ Abra http://127.0.0.1:8000
 4. **Status:** `GET /status/{job_id}`.
 5. **Eventos:** galeria em `/events` com filtros e supercut por classe.
 
+## Duas máquinas (perfis)
+
+| Perfil | Arquivo exemplo | Jobs | Detecção | Estimativa 72×1h |
+|--------|-----------------|------|----------|------------------|
+| Intel CPU | `.env.cpu-intel.example` | 2 paralelos | Frame cache FFmpeg + loop YOLO | ~2–3 dias |
+| RTX 4060 | `.env.gpu-rtx4060.example` | 1 | `stream=True` + `vid_stride` | ~10–18 h |
+
+```bash
+cp .env.cpu-intel.example .env   # ou .env.gpu-rtx4060.example na máquina com GPU
+```
+
+`GET /health` retorna `backend`, `device_name` e `max_concurrent_jobs` ativos.
+
+## Lotes
+
+Processar `incoming/` cria um lote `lote{N}-DD-MM-YYYY`. Ver `/lotes/{slug}`, relatório HTML e `GET /lotes/{slug}/supercuts.zip`.
+
 ## Configuração (`.env`)
 
 | Variável | Padrão | Descrição |
 |----------|--------|-----------|
 | `EVENT_MERGE_GAP_SEC` | 3 | Merge de tracks (s) |
-| `SAMPLE_FPS` | 2 | Amostragem para YOLO |
+| `SAMPLE_FPS` | 1 | 1 frame/s real (CPU e GPU) |
 | `CLIP_PADDING_SEC` | 2 | Padding dos clipes |
 | `DEVICE` | auto | `auto`, `cpu`, `cuda` |
+| `GENERATE_REPORTS_ON_COMPLETE` | false | PDF/CSV/JSON sob demanda |
+| `MAX_CONCURRENT_JOBS_CPU` | 2 | Fila no Intel |
+| `MAX_CONCURRENT_JOBS_GPU` | 1 | Fila na RTX 4060 |
 
 ## Testes
 
