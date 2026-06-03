@@ -7,11 +7,9 @@
   — Vídeo: {{ video.filename if video else event.video_id }}
   {% if batch %}<span class="badge bg-secondary ms-2"><a class="text-white text-decoration-none" href="/lotes/{{ batch.slug }}">{{ batch.slug }}</a></span>{% endif %}
 </p>
-<p>Intervalo (com padding): {{ "%.2f"|format(event.start_time_sec) }}s — {{ "%.2f"|format(event.end_time_sec) }}s</p>
-{% if event.detection_time_sec is not none %}
-<p>Horário da detecção: <strong>{{ "%.2f"|format(event.detection_time_sec) }}s</strong></p>
-{% endif %}
-<p>Início bruto (track): {{ "%.2f"|format(event.start_time_raw_sec) }}s</p>
+<p>Intervalo (com padding): {{ event.start_time_sec | hms }} — {{ event.end_time_sec | hms }}</p>
+<p>Horário da detecção: <strong>{{ (event.detection_time_sec if event.detection_time_sec is not none else event.start_time_raw_sec) | hms }}</strong></p>
+<p>Início bruto (track): {{ event.start_time_raw_sec | hms }}</p>
 <p>Tracks fundidos: <code>{{ event.merged_track_ids }}</code></p>
 <p>Confiança média: {{ "%.2f"|format(event.avg_confidence) }}</p>
 

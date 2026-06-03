@@ -21,9 +21,11 @@ from analisador_videos.ingest.service import (
 from analisador_videos.jobs.service import create_job, run_async
 from analisador_videos.pipeline.runner import build_supercut_for_video
 from analisador_videos.reports.batch_builder import build_batch_html
+from analisador_videos.util.time_format import format_hms
 
 TEMPLATES_DIR = Path(__file__).parent / "templates"
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
+templates.env.filters["hms"] = format_hms
 
 router = APIRouter(include_in_schema=False)
 

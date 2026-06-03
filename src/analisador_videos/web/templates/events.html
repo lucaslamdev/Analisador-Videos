@@ -55,10 +55,8 @@
       <div class="card-body">
         <span class="badge bg-info">{{ e.class_name }}</span>
         <p class="small mb-1">Vídeo #{{ e.video_id }}</p>
-        {% if e.detection_time_sec is not none %}
-        <p class="small">Detecção: {{ "%.1f"|format(e.detection_time_sec) }}s</p>
-        {% endif %}
-        <p class="small">{{ "%.1f"|format(e.start_time_raw_sec) }}s — {{ "%.1f"|format(e.end_time_sec) }}s</p>
+        <p class="small">Detecção: {{ (e.detection_time_sec if e.detection_time_sec is not none else e.start_time_raw_sec) | hms }}</p>
+        <p class="small">{{ e.start_time_raw_sec | hms }} — {{ e.end_time_sec | hms }}</p>
         <a href="/events/{{ e.id }}" class="btn btn-sm btn-primary">Detalhe</a>
       </div>
     </div>

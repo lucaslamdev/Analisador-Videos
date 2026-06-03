@@ -77,18 +77,10 @@ def download_report(video_id: int, format: str, db: Session = Depends(get_db)):
     }
     if format not in type_map:
         raise HTTPException(400, "Formato inválido")
-    artifact = db.scalar(
-        select(Artifact).where(
-            Artifact.video_id == video_id,
-            Artifact.type == type_map[format],
-        )
-    )
     video = db.get(Video, video_id)
     if not video:
         raise HTTPException(404, "Vídeo não encontrado")
-    path = Path(artifact.path) if artifact else None
-    if not path or not path.is_file():
-        path = ensure_video_report(db, video, format)
+    path = ensure_video_report(db, video, format)
     media = {
         "json": "application/json",
         "csv": "text/csv",

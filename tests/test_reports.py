@@ -26,6 +26,7 @@ def test_build_json_payload(tmp_path):
             start_time_sec=0.0,
             end_time_sec=2.0,
             start_time_raw_sec=0.5,
+            detection_time_sec=1.0,
             merged_track_ids=json.dumps([1]),
             avg_confidence=0.9,
             snapshot_path="data/snapshots/e1.jpg",
@@ -36,6 +37,7 @@ def test_build_json_payload(tmp_path):
     assert payload["video"]["sha256"] == "abc123"
     assert payload["params"]["sample_fps"] == 2
     assert len(payload["events"]) == 1
+    assert payload["events"][0]["detection_time_hms"] == "00:00:01"
 
 
 def test_write_csv_report(tmp_path):

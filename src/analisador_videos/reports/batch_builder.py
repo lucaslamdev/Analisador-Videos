@@ -6,6 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from analisador_videos.db.models import Batch, Event, Video
+from analisador_videos.util.time_format import format_hms
 
 
 def build_batch_html(db: Session, batch: Batch) -> str:
@@ -27,9 +28,12 @@ def build_batch_html(db: Session, batch: Batch) -> str:
         if e.thumbnail_path:
             thumb = f'<img src="/media/{escape(e.thumbnail_path)}" width="120" alt="">'
         det = e.detection_time_sec if e.detection_time_sec is not None else e.start_time_raw_sec
+        interval = (
+            f"{format_hms(e.start_time_raw_sec)} — {format_hms(e.end_time_sec)}"
+        )
         rows.append(
             f"<tr><td>{escape(v.filename)}</td><td>{escape(e.class_name)}</td>"
-            f"<td>{det:.1f}s</td><td>{thumb}</td>"
+            f"<td>{format_hms(det)}</td><td>{interval}</td><td>{thumb}</td>"
             f"<td><a href='/events/{e.id}'>#{e.id}</a></td></tr>"
         )
 
@@ -37,7 +41,9 @@ def build_batch_html(db: Session, batch: Batch) -> str:
         f"<tr><td>{escape(k)}</td><td>{v}</td></tr>" for k, v in sorted(by_class.items())
     )
     video_rows = "".join(
-        f"<tr><td>{v.id}</td><td>{escape(v.filename)}</td><td>{v.status}</td>"
+        f"<tr><td>{v.id}</td><td>{escape(v.filename)}</td>"
+        f"<td>{format_hms(v.duration_sec) if v.duration_sec else '—'}</td>"
+        f"<td>{v.status}</td>"
         f"<td><a href='/events?video_id={v.id}'>Eventos</a></td></tr>"
         for v in videos
     )
@@ -49,14 +55,14 @@ def build_batch_html(db: Session, batch: Batch) -> str:
 <h1>Lote {escape(batch.slug)}</h1>
 <p class="text-muted">Criado em {batch.created_at.isoformat()}</p>
 <h2>Vídeos ({len(videos)})</h2>
-<table class="table table-sm"><thead><tr><th>ID</th><th>Arquivo</th><th>Status</th><th></th></tr></thead>
-<tbody>{video_rows or '<tr><td colspan="4">Nenhum vídeo</td></tr>'}</tbody></table>
+<table class="table table-sm"><thead><tr><th>ID</th><th>Arquivo</th><th>Duração</th><th>Status</th><th></th></tr></thead>
+<tbody>{video_rows or '<tr><td colspan="5">Nenhum vídeo</td></tr>'}</tbody></table>
 <h2>Resumo por classe</h2>
 <table class="table table-sm"><thead><tr><th>Classe</th><th>Qtd</th></tr></thead>
 <tbody>{summary_rows or '<tr><td colspan="2">0 eventos</td></tr>'}</tbody></table>
 <h2>Eventos ({len(all_events)})</h2>
-<table class="table"><thead><tr><th>Vídeo</th><th>Classe</th><th>Detecção</th><th>Thumb</th><th></th></tr></thead>
-<tbody>{''.join(rows) or '<tr><td colspan="5">Nenhum evento</td></tr>'}</tbody></table>
+<table class="table"><thead><tr><th>Vídeo</th><th>Classe</th><th>Detecção</th><th>Intervalo</th><th>Thumb</th><th></th></tr></thead>
+<tbody>{''.join(rows) or '<tr><td colspan="6">Nenhum evento</td></tr>'}</tbody></table>
 <p><a class="btn btn-primary" href="/lotes/{escape(batch.slug)}/supercuts.zip">ZIP supercuts</a>
 <a class="btn btn-outline-secondary" href="/lotes/{escape(batch.slug)}">Página do lote</a></p>
 </body></html>"""

@@ -11,17 +11,18 @@
 
 <h2>Vídeos ({{ videos|length }})</h2>
 <table class="table table-sm">
-  <thead><tr><th>ID</th><th>Arquivo</th><th>Status</th><th>Eventos</th></tr></thead>
+  <thead><tr><th>ID</th><th>Arquivo</th><th>Duração</th><th>Status</th><th>Eventos</th></tr></thead>
   <tbody>
   {% for v in videos %}
     <tr>
       <td>{{ v.id }}</td>
       <td>{{ v.filename }}</td>
+      <td>{% if v.duration_sec %}{{ v.duration_sec | hms }}{% else %}—{% endif %}</td>
       <td><span class="badge bg-secondary">{{ v.status }}</span></td>
       <td><a href="/events?video_id={{ v.id }}">Ver</a></td>
     </tr>
   {% else %}
-    <tr><td colspan="4" class="text-muted">Nenhum vídeo neste lote.</td></tr>
+    <tr><td colspan="5" class="text-muted">Nenhum vídeo neste lote.</td></tr>
   {% endfor %}
   </tbody>
 </table>
@@ -47,6 +48,8 @@
       {% endif %}
       <div class="card-body p-2 small">
         <span class="badge bg-info">{{ e.class_name }}</span>
+        <p class="mb-0 mt-1">Detecção: {{ (e.detection_time_sec if e.detection_time_sec is not none else e.start_time_raw_sec) | hms }}</p>
+        <p class="mb-0 text-muted">{{ e.start_time_raw_sec | hms }} — {{ e.end_time_sec | hms }}</p>
         <a href="/events/{{ e.id }}" class="stretched-link"></a>
       </div>
     </div>

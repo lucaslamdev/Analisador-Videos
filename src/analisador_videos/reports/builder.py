@@ -11,6 +11,7 @@ from reportlab.platypus import Image, Paragraph, SimpleDocTemplate, Spacer, Tabl
 from reportlab.lib.styles import getSampleStyleSheet
 
 from analisador_videos.db.models import Artifact, Event, Video
+from analisador_videos.util.time_format import format_hms
 
 
 def build_json_payload(
@@ -46,6 +47,15 @@ def build_json_payload(
                 "start_time_sec": e.start_time_sec,
                 "end_time_sec": e.end_time_sec,
                 "start_time_raw_sec": e.start_time_raw_sec,
+                "detection_time_sec": e.detection_time_sec,
+                "start_time_hms": format_hms(e.start_time_sec),
+                "end_time_hms": format_hms(e.end_time_sec),
+                "start_time_raw_hms": format_hms(e.start_time_raw_sec),
+                "detection_time_hms": format_hms(
+                    e.detection_time_sec
+                    if e.detection_time_sec is not None
+                    else e.start_time_raw_sec
+                ),
                 "merged_track_ids": json.loads(e.merged_track_ids),
                 "avg_confidence": e.avg_confidence,
                 "snapshot_path": e.snapshot_path,
@@ -77,8 +87,11 @@ def write_csv_report(path: Path, events: list[Event]) -> None:
             fieldnames=[
                 "event_id",
                 "class_name",
+                "detection_time_hms",
+                "interval_hms",
                 "start_time_sec",
                 "end_time_sec",
+                "detection_time_sec",
                 "start_time_raw_sec",
                 "avg_confidence",
                 "merged_track_ids",
@@ -88,12 +101,22 @@ def write_csv_report(path: Path, events: list[Event]) -> None:
         )
         writer.writeheader()
         for e in events:
+            det = (
+                e.detection_time_sec
+                if e.detection_time_sec is not None
+                else e.start_time_raw_sec
+            )
             writer.writerow(
                 {
                     "event_id": e.id,
                     "class_name": e.class_name,
+                    "detection_time_hms": format_hms(det),
+                    "interval_hms": (
+                        f"{format_hms(e.start_time_raw_sec)} — {format_hms(e.end_time_sec)}"
+                    ),
                     "start_time_sec": e.start_time_sec,
                     "end_time_sec": e.end_time_sec,
+                    "detection_time_sec": det,
                     "start_time_raw_sec": e.start_time_raw_sec,
                     "avg_confidence": e.avg_confidence,
                     "merged_track_ids": e.merged_track_ids,
@@ -121,7 +144,7 @@ def write_pdf_report(
     story.append(Paragraph(f"SHA-256: {video.sha256}", styles["Normal"]))
     story.append(
         Paragraph(
-            f"Duração: {video.duration_sec:.1f}s | Resolução: {video.width}x{video.height}",
+            f"Duração: {format_hms(video.duration_sec)} | Resolução: {video.width}x{video.height}",
             styles["Normal"],
         )
     )
@@ -148,9 +171,15 @@ def write_pdf_report(
 
     story.append(Paragraph("Evidências", styles["Heading2"]))
     for e in events[:max_thumbnails]:
+        det = (
+            e.detection_time_sec
+            if e.detection_time_sec is not None
+            else e.start_time_raw_sec
+        )
         story.append(
             Paragraph(
-                f"Evento {e.id} — {e.class_name} [{e.start_time_sec:.1f}s - {e.end_time_sec:.1f}s]",
+                f"Evento {e.id} — {e.class_name} | Detecção {format_hms(det)} | "
+                f"Intervalo {format_hms(e.start_time_raw_sec)} — {format_hms(e.end_time_sec)}",
                 styles["Normal"],
             )
         )
