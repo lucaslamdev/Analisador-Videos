@@ -1,0 +1,1 @@
+"""Analisador de Vídeos — MVP."""

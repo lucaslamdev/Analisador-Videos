@@ -1,0 +1,9 @@
+[project]
+name = "analisador-videos"
+version = "0.1.0"
+description = "Sistema de análise inteligente de vídeos com detecção YOLO"
+requires-python = ">=3.12"
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
