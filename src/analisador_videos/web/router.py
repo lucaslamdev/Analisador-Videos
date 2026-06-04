@@ -98,6 +98,10 @@ def index(request: Request, db: Session = Depends(get_db)):
     batches = _batch_map(db, jobs)
     videos = db.scalars(select(Video).order_by(Video.id.desc()).limit(10)).all()
     lotes = db.scalars(select(Batch).order_by(Batch.created_at.desc()).limit(5)).all()
+    folder_error = request.query_params.get("folder_error")
+    folder_path = request.query_params.get("folder") or str(
+        settings.videos_input_dir.resolve()
+    )
     return templates.TemplateResponse(
         request,
         "index.html",
@@ -108,6 +112,8 @@ def index(request: Request, db: Session = Depends(get_db)):
                 "videos": videos,
                 "batches": batches,
                 "lotes": lotes,
+                "folder_error": folder_error,
+                "folder_path": folder_path,
             }
         ),
     )
@@ -389,9 +395,13 @@ async def web_upload(
 
 @router.post("/web/process-folder")
 async def web_process_folder(db: Session = Depends(get_db)):
+    input_dir = settings.videos_input_dir.resolve()
     paths = scan_folder(settings.videos_input_dir)
     if not paths:
-        return RedirectResponse("/", status_code=303)
+        return RedirectResponse(
+            f"/?folder_error=empty&folder={input_dir.as_posix()}",
+            status_code=303,
+        )
     batch, slug = next_batch_slug(db)
     for p in paths:
         dest = copy_to_storage(p, settings.data_dir / "videos")

@@ -4,6 +4,15 @@
 {% block content %}
 {{ page_header("Processar vídeos", "Envie MP4, processe a pasta incoming/ ou acompanhe jobs em andamento.") }}
 
+{% if folder_error == "empty" %}
+<div class="alert alert-warning" role="alert">
+  <strong>Nenhum MP4 encontrado</strong> em <code>{{ folder_path }}</code>.
+  Use arquivos <code>.mp4</code> na pasta ou em subpastas (ex.: <code>incoming/camera1/video.mp4</code>).
+  Rode o servidor na <strong>raiz do projeto</strong> e confira <code>VIDEOS_INPUT_DIR</code> no <code>.env</code>.
+  No terminal, use <code>--log-level info</code> no uvicorn para ver <code>scan_folder … N MP4(s)</code>.
+</div>
+{% endif %}
+
 <div class="stat-grid mb-4">
   <div class="stat-tile">
     <div class="stat-value">{{ videos|length }}</div>
@@ -42,7 +51,8 @@
     <div class="card card-app h-100">
       <div class="card-header"><i class="bi bi-folder2-open me-2"></i>Pasta de entrada</div>
       <div class="card-body d-flex flex-column">
-        <p class="text-muted">Coloque arquivos em <code>incoming/</code>. Um lote do dia é criado automaticamente.</p>
+        <p class="text-muted">Coloque MP4 em <code>incoming/</code> ou em subpastas. Um lote do dia é criado automaticamente.</p>
+        <p class="text-muted small mb-0">Pasta lida: <code>{{ folder_path|default("incoming") }}</code></p>
         <form action="/web/process-folder" method="post" class="mt-auto">
           <button class="btn btn-outline-secondary w-100" type="submit">
             <i class="bi bi-collection-play me-1"></i>Processar pasta (lote)

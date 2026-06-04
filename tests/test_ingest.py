@@ -43,6 +43,27 @@ def test_scan_folder(tmp_path):
     assert "c.mp4" in names
 
 
+def test_scan_folder_recursive_subdirs(tmp_path):
+    sub = tmp_path / "camera_a"
+    sub.mkdir()
+    (sub / "clip.mp4").write_bytes(b"x")
+    (tmp_path / "root.mp4").write_bytes(b"y")
+    found = scan_folder(tmp_path)
+    assert len(found) == 2
+    assert any(p.name == "clip.mp4" for p in found)
+    assert any(p.name == "root.mp4" for p in found)
+
+
+def test_scan_folder_non_recursive(tmp_path):
+    sub = tmp_path / "nested"
+    sub.mkdir()
+    (sub / "inner.mp4").write_bytes(b"x")
+    (tmp_path / "top.mp4").write_bytes(b"y")
+    found = scan_folder(tmp_path, recursive=False)
+    assert len(found) == 1
+    assert found[0].name == "top.mp4"
+
+
 def test_probe_video_missing_file():
     with pytest.raises(FileNotFoundError):
         probe_video(Path("/nonexistent/video.mp4"))

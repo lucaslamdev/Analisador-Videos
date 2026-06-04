@@ -1,7 +1,10 @@
 import hashlib
+import logging
 import shutil
 import uuid
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 
 def validate_mp4(filename: str) -> None:
@@ -26,12 +29,30 @@ def save_upload(filename: str, content: bytes, dest_dir: Path) -> Path:
     return dest
 
 
-def scan_folder(input_dir: Path) -> list[Path]:
-    if not input_dir.is_dir():
+def scan_folder(input_dir: Path, *, recursive: bool = True) -> list[Path]:
+    """Lista MP4 em input_dir. Com recursive=True (padrão), inclui subpastas."""
+    resolved = input_dir.resolve()
+    if not resolved.is_dir():
+        logger.warning("Pasta de entrada inexistente: %s", resolved)
         return []
-    return sorted(
-        p for p in input_dir.iterdir() if p.is_file() and p.suffix.lower() == ".mp4"
+
+    if recursive:
+        candidates = resolved.rglob("*")
+    else:
+        candidates = resolved.iterdir()
+
+    found = sorted(
+        p
+        for p in candidates
+        if p.is_file() and p.suffix.lower() == ".mp4"
     )
+    logger.info(
+        "scan_folder %s (recursive=%s): %d MP4(s)",
+        resolved,
+        recursive,
+        len(found),
+    )
+    return found
 
 
 def probe_video(path: Path) -> dict:
