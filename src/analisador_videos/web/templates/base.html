@@ -3,21 +3,64 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0f1419">
   <title>{% block title %}Analisador de Vídeos{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
   <link href="/static/style.css" rel="stylesheet">
 </head>
 <body>
-  <nav class="navbar navbar-expand-lg navbar-dark bg-dark mb-4">
+  <a class="skip-link" href="#conteudo-principal">Ir para o conteúdo</a>
+  <nav class="navbar navbar-expand-lg navbar-dark navbar-app sticky-top">
     <div class="container">
-      <a class="navbar-brand" href="/">Analisador de Vídeos</a>
-      <div class="navbar-nav">
-        <a class="nav-link" href="/">Início</a>
-        <a class="nav-link" href="/jobs">Jobs</a>
-        <a class="nav-link" href="/events">Eventos</a>
+      <a class="navbar-brand d-flex align-items-center gap-2" href="/">
+        <i class="bi bi-camera-video" aria-hidden="true"></i>
+        Analisador de Vídeos
+      </a>
+      <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navMain"
+              aria-controls="navMain" aria-expanded="false" aria-label="Abrir menu">
+        <span class="navbar-toggler-icon"></span>
+      </button>
+      <div class="collapse navbar-collapse" id="navMain">
+        <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+          <li class="nav-item">
+            <a class="nav-link{% if nav_active == 'home' %} active{% endif %}" href="/">
+              <i class="bi bi-house-door me-1" aria-hidden="true"></i>Início
+            </a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link{% if nav_active == 'jobs' %} active{% endif %}" href="/jobs">
+              <i class="bi bi-cpu me-1" aria-hidden="true"></i>Jobs
+            </a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link{% if nav_active == 'events' %} active{% endif %}" href="/events">
+              <i class="bi bi-grid me-1" aria-hidden="true"></i>Eventos
+            </a>
+          </li>
+        </ul>
+        {% if health %}
+        <span class="health-pill d-none d-md-inline" title="Backend de inferência">
+          <i class="bi bi-hdd-network me-1" aria-hidden="true"></i>
+          {{ health.backend | upper }}{% if health.device_name %} · {{ health.device_name }}{% endif %}
+        </span>
+        {% endif %}
       </div>
     </div>
   </nav>
-  <main class="container">{% block content %}{% endblock %}</main>
+  <main id="conteudo-principal" class="container app-main py-4">
+    {% block content %}{% endblock %}
+  </main>
+  <footer class="app-footer">
+    <div class="container d-flex flex-wrap justify-content-between align-items-center gap-2">
+      <span>Analisador de Vídeos — evidências forenses com YOLO</span>
+      <a href="/health" class="small" target="_blank" rel="noopener">API /health</a>
+    </div>
+  </footer>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  {% block scripts %}{% endblock %}
 </body>
 </html>

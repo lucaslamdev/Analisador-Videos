@@ -4,7 +4,7 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 
-from analisador_videos.api import batches, events, process, status, videos
+from analisador_videos.api import batches, events, jobs, process, status, videos
 from analisador_videos.pipeline.compute import health_info
 from analisador_videos.config import settings
 from analisador_videos.db.init_db import create_tables
@@ -20,6 +20,8 @@ async def lifespan(app: FastAPI):
     for sub in ("videos", "snapshots", "clips", "supercuts", "reports"):
         (settings.data_dir / sub).mkdir(exist_ok=True)
     (settings.data_dir / "snapshots" / "thumbs").mkdir(exist_ok=True)
+    (settings.data_dir / "clips" / "annotated").mkdir(parents=True, exist_ok=True)
+    (settings.data_dir / "supercuts" / "annotated").mkdir(parents=True, exist_ok=True)
     create_tables()
     yield
 
@@ -29,6 +31,7 @@ app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 app.include_router(web_router)
 app.include_router(process.router)
+app.include_router(jobs.router)
 app.include_router(status.router)
 app.include_router(events.router)
 app.include_router(videos.router)

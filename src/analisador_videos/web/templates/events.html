@@ -1,68 +1,171 @@
 {% extends "base.html" %}
-{% block title %}Eventos{% endblock %}
+{% from "macros.html" import page_header, event_times, empty_state %}
+{% block title %}Eventos — Analisador{% endblock %}
 {% block content %}
-<h1>Galeria de eventos</h1>
-<form class="row g-2 mb-4" method="get">
-  <div class="col-auto">
-    <select name="batch" class="form-select">
-      <option value="">Todos os lotes</option>
-      {% for l in lotes %}
-      <option value="{{ l.slug }}" {% if filters.batch == l.slug %}selected{% endif %}>{{ l.slug }}</option>
-      {% endfor %}
-    </select>
-  </div>
-  <div class="col-auto">
-    <select name="video_id" class="form-select">
-      <option value="">Todos os vídeos</option>
-      {% for v in videos %}
-      <option value="{{ v.id }}" {% if filters.video_id == v.id %}selected{% endif %}>{{ v.filename }}</option>
-      {% endfor %}
-    </select>
-  </div>
-  <div class="col-auto">
-    <select name="class" class="form-select">
-      <option value="">Todas as classes</option>
-      {% for c in classes %}
-      <option value="{{ c }}" {% if filters.class_name == c %}selected{% endif %}>{{ c }}</option>
-      {% endfor %}
-    </select>
-  </div>
-  <div class="col-auto"><button class="btn btn-primary" type="submit">Filtrar</button></div>
-</form>
+{{ page_header("Galeria de eventos", "Selecione um ou mais lotes, vídeos e classes. Use Ctrl+clique ou Shift+clique nas listas.") }}
 
-{% if filters.video_id %}
-<form class="mb-3 d-flex gap-2 flex-wrap" action="/web/supercut/{{ filters.video_id }}" method="post">
-  <select name="class_name" class="form-select w-auto">
-    <option value="">Supercut completo</option>
-    {% for c in classes %}
-    <option value="{{ c }}">Só {{ c }}</option>
-    {% endfor %}
-  </select>
-  <button class="btn btn-outline-secondary" type="submit">Gerar supercut</button>
-  <a class="btn btn-outline-primary" href="/videos/{{ filters.video_id }}/reports/pdf">PDF</a>
-  <a class="btn btn-outline-primary" href="/videos/{{ filters.video_id }}/reports/json">JSON</a>
-  <a class="btn btn-outline-primary" href="/videos/{{ filters.video_id }}/reports/csv">CSV</a>
-</form>
-{% endif %}
-
-<div class="row row-cols-1 row-cols-md-3 g-3">
-{% for e in events %}
-  <div class="col">
-    <div class="card h-100">
-      {% if e.thumbnail_path %}
-      <img src="/media/{{ e.thumbnail_path }}" class="card-img-top" alt="thumb">
+<form class="filters-bar" method="get" role="search" aria-label="Filtros de eventos" id="events-filter-form">
+  <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+    <span class="text-muted small">
+      <i class="bi bi-funnel me-1"></i>
+      {% if active_filter_count > 0 %}
+        {{ active_filter_count }} filtro(s) ativo(s) · {{ events_count }} evento(s)
+      {% else %}
+        Nenhum filtro · até 200 eventos exibidos
       {% endif %}
-      <div class="card-body">
-        <span class="badge bg-info">{{ e.class_name }}</span>
-        <p class="small mb-1">Vídeo #{{ e.video_id }}</p>
-        <p class="small">Detecção: {{ (e.detection_time_sec if e.detection_time_sec is not none else e.start_time_raw_sec) | hms }}</p>
-        <p class="small">{{ e.start_time_raw_sec | hms }} — {{ e.end_time_sec | hms }}</p>
-        <a href="/events/{{ e.id }}" class="btn btn-sm btn-primary">Detalhe</a>
+    </span>
+    <div class="d-flex gap-2">
+      <button type="button" class="btn btn-sm btn-outline-secondary" data-filter-action="clear-all">Limpar tudo</button>
+      <button type="submit" class="btn btn-sm btn-primary"><i class="bi bi-check2 me-1"></i>Aplicar filtros</button>
+    </div>
+  </div>
+
+  <div class="row g-3">
+    <div class="col-lg-4">
+      <div class="filter-panel">
+        <div class="filter-panel-head">
+          <label class="form-label mb-0">Lotes</label>
+          <div class="btn-group btn-group-sm">
+            <button type="button" class="btn btn-outline-secondary btn-sm" data-filter-select-all="batch">Todos</button>
+            <button type="button" class="btn btn-outline-secondary btn-sm" data-filter-clear="batch">Nenhum</button>
+          </div>
+        </div>
+        <select id="f-batch" name="batch" class="form-select filter-multi" multiple size="6" aria-label="Lotes">
+          {% for l in lotes %}
+          <option value="{{ l.slug }}" {% if l.slug in filters.batch_slugs %}selected{% endif %}>{{ l.slug }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+    <div class="col-lg-4">
+      <div class="filter-panel">
+        <div class="filter-panel-head">
+          <label class="form-label mb-0">Vídeos</label>
+          <div class="btn-group btn-group-sm">
+            <button type="button" class="btn btn-outline-secondary btn-sm" data-filter-select-all="video_id">Todos</button>
+            <button type="button" class="btn btn-outline-secondary btn-sm" data-filter-clear="video_id">Nenhum</button>
+          </div>
+        </div>
+        <select id="f-video" name="video_id" class="form-select filter-multi" multiple size="6" aria-label="Vídeos">
+          {% for v in videos %}
+          <option value="{{ v.id }}" {% if v.id in filters.video_ids %}selected{% endif %} title="{{ v.filename }}">{{ v.filename }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+    <div class="col-lg-4">
+      <div class="filter-panel">
+        <div class="filter-panel-head">
+          <label class="form-label mb-0">Classes</label>
+          <div class="btn-group btn-group-sm">
+            <button type="button" class="btn btn-outline-secondary btn-sm" data-filter-select-all="class">Todos</button>
+            <button type="button" class="btn btn-outline-secondary btn-sm" data-filter-clear="class">Nenhum</button>
+          </div>
+        </div>
+        <select id="f-class" name="class" class="form-select filter-multi" multiple size="6" aria-label="Classes">
+          {% for c in classes %}
+          <option value="{{ c }}" {% if c in filters.class_names %}selected{% endif %}>{{ c | class_pt }}</option>
+          {% endfor %}
+        </select>
       </div>
     </div>
   </div>
-{% else %}
-  <p class="text-muted">Nenhum evento encontrado.</p>
+
+  {% if active_filter_count > 0 %}
+  <div class="filter-chips mt-3" aria-label="Filtros ativos">
+    {% for slug in filters.batch_slugs %}
+    <span class="filter-chip">Lote: {{ slug }}</span>
+    {% endfor %}
+    {% for vid in filters.video_ids %}
+    {% if video_by_id.get(vid) %}
+    <span class="filter-chip">Vídeo: {{ video_by_id[vid].filename | truncate(28, True, '…') }}</span>
+    {% endif %}
+    {% endfor %}
+    {% for c in filters.class_names %}
+    <span class="filter-chip">{{ c | class_pt }}</span>
+    {% endfor %}
+  </div>
+  {% endif %}
+</form>
+
+{% if filters.video_ids|length == 1 %}
+<div class="card card-app mb-4">
+  <div class="card-body d-flex flex-wrap gap-2 align-items-center">
+    <span class="text-muted small me-2">Ferramentas do vídeo selecionado:</span>
+    {% set vid = filters.video_ids[0] %}
+    <form class="d-flex flex-wrap gap-2" action="/web/supercut/{{ vid }}" method="post">
+      <select name="class_name" class="form-select form-select-sm" style="width:auto">
+        <option value="">Supercut completo</option>
+        {% for c in classes %}
+        <option value="{{ c }}">Só {{ c | class_pt }}</option>
+        {% endfor %}
+      </select>
+      <button class="btn btn-sm btn-outline-secondary" type="submit">
+        {% if video_supercuts %}Regenerar supercut{% else %}Gerar supercut{% endif %}
+      </button>
+    </form>
+    {% if video_supercuts %}
+    <form class="d-flex flex-wrap gap-2 align-items-center" action="/web/videos/{{ vid }}/annotate-supercut" method="post">
+      <select name="class_name" class="form-select form-select-sm" style="width:auto">
+        <option value="">Supercut completo</option>
+        {% for c in classes %}
+        <option value="{{ c }}">Só {{ c | class_pt }}</option>
+        {% endfor %}
+      </select>
+      <button class="btn btn-sm btn-outline-secondary" type="submit">Bbox padrão</button>
+      <button class="btn btn-sm btn-outline-warning" type="submit" name="sensitive" value="true">Bbox sensível</button>
+    </form>
+    {% if parent_job_id %}
+    <form class="d-inline" action="/web/jobs/{{ parent_job_id }}/sensitive-v2" method="post"
+          onsubmit="return confirm('Criar job/lote v2 com bbox sensível em todos os clipes e relatórios v2? v1 permanece.');">
+      <button class="btn btn-sm btn-primary" type="submit">Job v2 (sensível)</button>
+    </form>
+    {% endif %}
+    {% endif %}
+    <a class="btn btn-sm btn-outline-primary" href="/videos/{{ vid }}/reports/pdf">PDF</a>
+    <a class="btn btn-sm btn-outline-primary" href="/videos/{{ vid }}/reports/json">JSON</a>
+    <a class="btn btn-sm btn-outline-primary" href="/videos/{{ vid }}/reports/csv">CSV</a>
+  </div>
+  {% if video_supercuts %}
+  <div class="card-body border-top pt-3">
+    <p class="small text-muted mb-3">Supercut já gerado — visualize ou baixe abaixo sem precisar gerar de novo.</p>
+    {% include "partials/supercut_panel.html" %}
+  </div>
+  {% endif %}
+</div>
+{% elif filters.video_ids|length > 1 %}
+<p class="text-muted small mb-3">Relatórios e supercut estão disponíveis ao filtrar um único vídeo.</p>
+{% endif %}
+
+{% if events %}
+<div class="row row-cols-1 row-cols-sm-2 row-cols-lg-3 g-3">
+{% for e in events %}
+  <div class="col">
+    <article class="card card-app event-card h-100">
+      {% if e.thumbnail_path %}
+      <a href="/media/{{ e.snapshot_path or e.thumbnail_path }}" target="_blank" rel="noopener noreferrer" title="Abrir imagem">
+        <img src="/media/{{ e.thumbnail_path }}" class="card-img-top" alt="{{ e.class_name | class_pt }}">
+      </a>
+      {% endif %}
+      <div class="card-body">
+        <span class="badge rounded-pill badge-class mb-2">{{ e.class_name | class_pt }}</span>
+        {% if video_by_id.get(e.video_id) %}
+        <p class="small text-truncate mb-2" title="{{ video_by_id[e.video_id].filename }}">{{ video_by_id[e.video_id].filename }}</p>
+        {% else %}
+        <p class="small text-muted mb-2">Vídeo #{{ e.video_id }}</p>
+        {% endif %}
+        {{ event_times(e) }}
+        <a href="/events/{{ e.id }}" class="btn btn-sm btn-primary mt-3 stretched-link-btn">Ver detalhe</a>
+      </div>
+    </article>
+  </div>
 {% endfor %}
 </div>
+{% else %}
+{{ empty_state("Nenhum evento", "Ajuste os filtros ou processe um vídeo primeiro.", "search") }}
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/events-filters.js"></script>
 {% endblock %}

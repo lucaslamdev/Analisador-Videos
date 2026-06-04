@@ -1,4 +1,3 @@
-import json
 from collections import Counter
 from html import escape
 
@@ -6,6 +5,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from analisador_videos.db.models import Batch, Event, Video
+from analisador_videos.reports.evidence import event_interval_evidence_html
+from analisador_videos.util.class_labels import class_label_pt
 from analisador_videos.util.time_format import format_hms
 
 
@@ -21,18 +22,17 @@ def build_batch_html(db: Session, batch: Batch) -> str:
         for e in events:
             all_events.append((v, e))
 
-    by_class = Counter(e.class_name for _, e in all_events)
+    by_class = Counter(class_label_pt(e.class_name) for _, e in all_events)
     rows = []
     for v, e in all_events[:200]:
-        thumb = ""
-        if e.thumbnail_path:
-            thumb = f'<img src="/media/{escape(e.thumbnail_path)}" width="120" alt="">'
+        thumb = event_interval_evidence_html(v, e, db=db)
         det = e.detection_time_sec if e.detection_time_sec is not None else e.start_time_raw_sec
         interval = (
             f"{format_hms(e.start_time_raw_sec)} — {format_hms(e.end_time_sec)}"
         )
         rows.append(
-            f"<tr><td>{escape(v.filename)}</td><td>{escape(e.class_name)}</td>"
+            f"<tr><td>{escape(v.filename)}</td>"
+            f"<td>{escape(class_label_pt(e.class_name))}</td>"
             f"<td>{format_hms(det)}</td><td>{interval}</td><td>{thumb}</td>"
             f"<td><a href='/events/{e.id}'>#{e.id}</a></td></tr>"
         )
@@ -51,9 +51,12 @@ def build_batch_html(db: Session, batch: Batch) -> str:
     return f"""<!DOCTYPE html>
 <html lang="pt-BR"><head><meta charset="utf-8"><title>Lote {escape(batch.slug)}</title>
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<link href="/static/style.css" rel="stylesheet">
+<style>body {{ padding: 1.5rem; }} .evidence-pair .evidence-img {{ border:1px solid #dee2e6;border-radius:4px;cursor:pointer; }} .evidence-pair .evidence-img:hover {{ opacity:0.9; }}</style>
 </head><body class="container py-4">
 <h1>Lote {escape(batch.slug)}</h1>
 <p class="text-muted">Criado em {batch.created_at.isoformat()}</p>
+<p class="small text-muted">Evidência: primeira e última captura do intervalo (clique para ampliar).</p>
 <h2>Vídeos ({len(videos)})</h2>
 <table class="table table-sm"><thead><tr><th>ID</th><th>Arquivo</th><th>Duração</th><th>Status</th><th></th></tr></thead>
 <tbody>{video_rows or '<tr><td colspan="5">Nenhum vídeo</td></tr>'}</tbody></table>
@@ -61,7 +64,7 @@ def build_batch_html(db: Session, batch: Batch) -> str:
 <table class="table table-sm"><thead><tr><th>Classe</th><th>Qtd</th></tr></thead>
 <tbody>{summary_rows or '<tr><td colspan="2">0 eventos</td></tr>'}</tbody></table>
 <h2>Eventos ({len(all_events)})</h2>
-<table class="table"><thead><tr><th>Vídeo</th><th>Classe</th><th>Detecção</th><th>Intervalo</th><th>Thumb</th><th></th></tr></thead>
+<table class="table"><thead><tr><th>Vídeo</th><th>Classe</th><th>Detecção</th><th>Intervalo</th><th>Evidência</th><th></th></tr></thead>
 <tbody>{''.join(rows) or '<tr><td colspan="6">Nenhum evento</td></tr>'}</tbody></table>
 <p><a class="btn btn-primary" href="/lotes/{escape(batch.slug)}/supercuts.zip">ZIP supercuts</a>
 <a class="btn btn-outline-secondary" href="/lotes/{escape(batch.slug)}">Página do lote</a></p>

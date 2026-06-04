@@ -14,6 +14,9 @@ class Settings(BaseSettings):
     device: str = "auto"
     confidence_threshold: float = 0.5
     vehicle_confidence: float = 0.35
+    annotate_sensitive_confidence: float = 0.22
+    annotate_sensitive_vehicle_confidence: float = 0.18
+    annotate_sensitive_iou: float = 0.4
     pdf_max_thumbnails: int = 20
     merge_spatial_ratio: float = 0.15
 

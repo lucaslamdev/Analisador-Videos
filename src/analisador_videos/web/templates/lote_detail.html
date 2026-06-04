@@ -1,59 +1,143 @@
 {% extends "base.html" %}
-{% block title %}Lote {{ batch.slug }}{% endblock %}
+{% from "macros.html" import breadcrumb, page_header, status_badge, event_times, empty_state, cancel_job_button, delete_job_button, job_export_buttons, batch_export_buttons %}
+{% block title %}Lote {{ batch.slug }} — Analisador{% endblock %}
 {% block content %}
-<h1>Lote <code>{{ batch.slug }}</code></h1>
-<p class="text-muted">Criado em {{ batch.created_at }}</p>
+{{ breadcrumb([("Início", "/"), (batch.slug, None)]) }}
 
-<div class="mb-3 d-flex gap-2 flex-wrap">
-  <a class="btn btn-primary" href="/lotes/{{ batch.slug }}/supercuts.zip">Baixar supercuts (ZIP)</a>
-  <a class="btn btn-outline-secondary" href="/lotes/{{ batch.slug }}/relatorio" target="_blank">Relatório HTML</a>
+{{ page_header("Lote " ~ batch.slug, "Criado em " ~ batch.created_at.strftime("%d/%m/%Y %H:%M")) }}
+
+<div class="card card-app mb-4">
+  <div class="card-header">Ações do lote</div>
+  <div class="card-body d-flex flex-wrap gap-2 align-items-center">
+    {{ batch_export_buttons(batch) }}
+    <span class="vr d-none d-md-inline mx-1"></span>
+    {% if active_jobs_count > 0 %}
+    <form action="/web/lotes/{{ batch.slug }}/cancel" method="post" class="d-inline"
+          onsubmit="return confirm('Cancelar {{ active_jobs_count }} job(s) ativo(s)?');">
+      <button type="submit" class="btn btn-sm btn-outline-warning">
+        <i class="bi bi-x-octagon me-1"></i>Cancelar lote
+      </button>
+    </form>
+    {% endif %}
+    {% if batch.analysis_version == 1 and not batch_v2 %}
+    <form action="/web/lotes/{{ batch.slug }}/sensitive-v2" method="post" class="d-inline"
+          onsubmit="return confirm('Gerar lote v2 com bbox sensível e relatórios v2 para todos os vídeos? v1 permanece.');">
+      <button type="submit" class="btn btn-sm btn-warning">
+        <i class="bi bi-bounding-box-circles me-1"></i>Lote v2 (sensível)
+      </button>
+    </form>
+    {% endif %}
+    {% if batch_v2 %}
+    <a class="btn btn-sm btn-outline-info" href="/lotes/{{ batch_v2.slug }}">Ver lote v2</a>
+    <a class="btn btn-sm btn-outline-primary" href="/lotes/{{ batch.slug }}/reports/v2/html" target="_blank">Relatório v2</a>
+    {% endif %}
+    <form action="/web/lotes/{{ batch.slug }}/delete" method="post" class="d-inline"
+          onsubmit="return confirm('Excluir o lote inteiro com TODOS os vídeos, jobs, fotos, clipes, eventos e relatórios? Esta ação não pode ser desfeita.');">
+      <button type="submit" class="btn btn-sm btn-outline-danger">
+        <i class="bi bi-trash me-1"></i>Excluir lote
+      </button>
+    </form>
+    <a class="btn btn-sm btn-outline-secondary" href="/events?batch={{ batch.slug }}">
+      <i class="bi bi-grid me-1"></i>Eventos do lote
+    </a>
+  </div>
 </div>
 
-<h2>Vídeos ({{ videos|length }})</h2>
-<table class="table table-sm">
-  <thead><tr><th>ID</th><th>Arquivo</th><th>Duração</th><th>Status</th><th>Eventos</th></tr></thead>
-  <tbody>
-  {% for v in videos %}
-    <tr>
-      <td>{{ v.id }}</td>
-      <td>{{ v.filename }}</td>
-      <td>{% if v.duration_sec %}{{ v.duration_sec | hms }}{% else %}—{% endif %}</td>
-      <td><span class="badge bg-secondary">{{ v.status }}</span></td>
-      <td><a href="/events?video_id={{ v.id }}">Ver</a></td>
-    </tr>
-  {% else %}
-    <tr><td colspan="5" class="text-muted">Nenhum vídeo neste lote.</td></tr>
-  {% endfor %}
-  </tbody>
-</table>
+<h2 class="section-title">Jobs do lote ({{ batch_jobs|length }})</h2>
+{% if batch_jobs %}
+<div class="table-responsive mb-4">
+  <table class="table table-app table-hover table-sm mb-0">
+    <thead>
+      <tr>
+        <th>Job</th><th>Vídeo</th><th>Status</th><th>Progresso</th>
+        <th>Exportar</th><th>Ações</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for job in batch_jobs %}
+      <tr>
+        <td><a href="/jobs/{{ job.id }}"><code>{{ job.id[:8] }}…</code></a></td>
+        <td class="text-truncate" style="max-width:12rem">
+          {% if video_by_id.get(job.video_id) %}{{ video_by_id[job.video_id].filename }}{% else %}#{{ job.video_id }}{% endif %}
+        </td>
+        <td>{{ status_badge(job.status) }}</td>
+        <td class="small">{{ job.progress_pct }}%</td>
+        <td>{{ job_export_buttons(job) }}</td>
+        <td class="text-nowrap">
+          {{ cancel_job_button(job, compact=true) }}
+          {{ delete_job_button(job, compact=true) }}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<p class="text-muted mb-4">Nenhum job neste lote.</p>
+{% endif %}
 
-<h2>Resumo por classe</h2>
-<ul class="list-group w-auto mb-4">
-  {% for cls, count in by_class.items() %}
-  <li class="list-group-item d-flex justify-content-between">
-    <span>{{ cls }}</span><span class="badge bg-info">{{ count }}</span>
-  </li>
-  {% else %}
-  <li class="list-group-item text-muted">Sem eventos ainda.</li>
-  {% endfor %}
-</ul>
+<div class="row g-4 mb-4">
+  <div class="col-lg-8">
+    <h2 class="section-title">Vídeos ({{ videos|length }})</h2>
+    {% if videos %}
+    <div class="table-responsive">
+      <table class="table table-app table-hover table-sm mb-0">
+        <thead><tr><th>ID</th><th>Arquivo</th><th>Duração</th><th>Status</th><th></th></tr></thead>
+        <tbody>
+        {% for v in videos %}
+          <tr>
+            <td>{{ v.id }}</td>
+            <td class="text-truncate" style="max-width:16rem">{{ v.filename }}</td>
+            <td class="font-monospace small">{% if v.duration_sec %}{{ v.duration_sec | hms }}{% else %}—{% endif %}</td>
+            <td>{{ status_badge(v.status) }}</td>
+            <td><a href="/events?video_id={{ v.id }}" class="btn btn-sm btn-outline-primary">Eventos</a></td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    {{ empty_state("Lote vazio", "Nenhum vídeo associado.", "inbox") }}
+    {% endif %}
+  </div>
+  <div class="col-lg-4">
+    <h2 class="section-title">Por classe</h2>
+    {% if by_class %}
+    <ul class="list-group list-group-app">
+      {% for cls, count in by_class.items() %}
+      <li class="list-group-item d-flex justify-content-between align-items-center">
+        <span>{{ cls }}</span>
+        <span class="badge rounded-pill badge-class">{{ count }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="text-muted">Sem eventos ainda.</p>
+    {% endif %}
+  </div>
+</div>
 
-<h2>Últimos eventos</h2>
-<div class="row row-cols-2 row-cols-md-4 g-2">
+<h2 class="section-title">Últimos eventos</h2>
+{% if events %}
+<div class="row row-cols-2 row-cols-md-3 row-cols-lg-4 g-3">
 {% for e in events %}
   <div class="col">
-    <div class="card">
+    <article class="card card-app event-card h-100 position-relative">
       {% if e.thumbnail_path %}
-      <img src="/media/{{ e.thumbnail_path }}" class="card-img-top" alt="">
+      <a href="/media/{{ e.snapshot_path or e.thumbnail_path }}" target="_blank" rel="noopener noreferrer">
+        <img src="/media/{{ e.thumbnail_path }}" class="card-img-top" alt="{{ e.class_name | class_pt }}">
+      </a>
       {% endif %}
-      <div class="card-body p-2 small">
-        <span class="badge bg-info">{{ e.class_name }}</span>
-        <p class="mb-0 mt-1">Detecção: {{ (e.detection_time_sec if e.detection_time_sec is not none else e.start_time_raw_sec) | hms }}</p>
-        <p class="mb-0 text-muted">{{ e.start_time_raw_sec | hms }} — {{ e.end_time_sec | hms }}</p>
-        <a href="/events/{{ e.id }}" class="stretched-link"></a>
+      <div class="card-body p-2">
+        <span class="badge rounded-pill badge-class">{{ e.class_name | class_pt }}</span>
+        <div class="mt-2">{{ event_times(e) }}</div>
+        <a href="/events/{{ e.id }}" class="stretched-link" aria-label="Evento {{ e.id }}"></a>
       </div>
-    </div>
+    </article>
   </div>
 {% endfor %}
 </div>
+{% else %}
+{{ empty_state("Sem eventos", "Aguarde o processamento dos vídeos do lote.", "hourglass") }}
+{% endif %}
 {% endblock %}

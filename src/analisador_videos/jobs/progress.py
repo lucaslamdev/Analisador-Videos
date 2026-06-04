@@ -31,6 +31,6 @@ def update_job(
         job.frames_done = frames_done
     if frames_total is not None:
         job.frames_total = frames_total
-    if status in ("done", "failed"):
+    if status in ("done", "failed", "cancelled"):
         job.finished_at = datetime.utcnow()
     db.commit()

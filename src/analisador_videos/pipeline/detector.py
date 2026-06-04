@@ -13,20 +13,29 @@ from analisador_videos.pipeline.sampler import (
     vid_stride_for_sample,
 )
 
-MVP_CLASSES = frozenset(
-    {"person", "car", "motorcycle", "truck", "bus", "bicycle", "backpack"}
+# Classes de transporte — limiar de confiança mais baixo (vehicle_confidence)
+VEHICLE_CLASSES = frozenset(
+    {
+        "bicycle",
+        "car",
+        "motorcycle",
+        "airplane",
+        "bus",
+        "train",
+        "truck",
+        "boat",
+    }
 )
-VEHICLE_CLASSES = frozenset({"car", "motorcycle", "truck", "bus"})
 
-YOLO_CLASS_NAMES: dict[int, str] = {
-    0: "person",
-    1: "bicycle",
-    2: "car",
-    3: "motorcycle",
-    5: "bus",
-    7: "truck",
-    24: "backpack",
-}
+
+def model_class_names(model) -> dict[int, str]:
+    """Nomes de classe do modelo YOLO (todas as classes suportadas)."""
+    raw = getattr(model, "names", None)
+    if raw is None:
+        return {}
+    if isinstance(raw, dict):
+        return {int(k): str(v) for k, v in raw.items()}
+    return {i: str(name) for i, name in enumerate(raw)}
 
 
 def _conf_threshold(settings: Settings, class_name: str) -> float:
@@ -35,8 +44,8 @@ def _conf_threshold(settings: Settings, class_name: str) -> float:
     return settings.confidence_threshold
 
 
-def _class_name_from_id(class_id: int) -> str | None:
-    return YOLO_CLASS_NAMES.get(class_id)
+def _class_name_from_id(class_id: int, names: dict[int, str]) -> str | None:
+    return names.get(class_id)
 
 
 def _update_accum(
@@ -141,6 +150,7 @@ def _run_detection_cpu_loop(
     indices = set(frame_indices(fps, total_frames, settings.sample_fps))
     total_work = len(indices)
     model = YOLO(settings.yolo_model)
+    class_names = model_class_names(model)
     accum: dict[tuple[int, str], dict] = {}
     done = 0
 
@@ -163,9 +173,12 @@ def _run_detection_cpu_loop(
                 accum,
                 frame_idx / fps if fps > 0 else 0.0,
                 settings,
+                class_names,
             )
             done += 1
-            if on_progress and (done % settings.progress_update_every_n_frames == 0 or done == total_work):
+            if on_progress and (
+                done % settings.progress_update_every_n_frames == 0 or done == total_work
+            ):
                 on_progress(done, total_work)
         frame_idx += 1
     cap.release()
@@ -191,6 +204,7 @@ def _run_detection_gpu_stream(
     stride = vid_stride_for_sample(fps, settings.sample_fps)
     total_work = expected_sample_count(fps, total_frames, settings.sample_fps)
     model = YOLO(settings.yolo_model)
+    class_names = model_class_names(model)
     accum: dict[tuple[int, str], dict] = {}
     done = 0
 
@@ -213,7 +227,7 @@ def _run_detection_gpu_stream(
         if hasattr(result, "frame") and result.frame is not None:
             frame_idx = int(result.frame)
         t_sec = frame_idx / fps if fps > 0 else float(done)
-        _process_frame_result(result, accum, t_sec, settings)
+        _process_frame_result(result, accum, t_sec, settings, class_names)
         done += 1
         if on_progress and (
             done % settings.progress_update_every_n_frames == 0 or done >= total_work
@@ -236,6 +250,7 @@ def _run_detection_on_images(
     from ultralytics import YOLO
 
     model = YOLO(settings.yolo_model)
+    class_names = model_class_names(model)
     accum: dict[tuple[int, str], dict] = {}
     total_work = len(frame_paths)
 
@@ -257,6 +272,7 @@ def _run_detection_on_images(
             accum,
             t_sec,
             settings,
+            class_names,
         )
         if on_progress and (
             (i + 1) % settings.progress_update_every_n_frames == 0
@@ -272,14 +288,15 @@ def _process_frame_result(
     accum: dict[tuple[int, str], dict],
     t_sec: float,
     settings: Settings,
+    class_names: dict[int, str],
 ) -> None:
     if not results or results[0].boxes is None or results[0].boxes.id is None:
         return
     boxes = results[0].boxes
     for i in range(len(boxes)):
         cls_id = int(boxes.cls[i].item())
-        class_name = _class_name_from_id(cls_id)
-        if class_name is None or class_name not in MVP_CLASSES:
+        class_name = _class_name_from_id(cls_id, class_names)
+        if class_name is None:
             continue
         conf = float(boxes.conf[i].item())
         if conf < _conf_threshold(settings, class_name):

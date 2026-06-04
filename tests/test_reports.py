@@ -37,6 +37,8 @@ def test_build_json_payload(tmp_path):
     assert payload["video"]["sha256"] == "abc123"
     assert payload["params"]["sample_fps"] == 2
     assert len(payload["events"]) == 1
+    assert payload["events"][0]["class_name"] == "Pessoa"
+    assert payload["events"][0]["class_name_en"] == "person"
     assert payload["events"][0]["detection_time_hms"] == "00:00:01"
 
 

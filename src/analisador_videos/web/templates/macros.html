@@ -1,0 +1,133 @@
+{% macro page_header(title, subtitle=None, actions=None) %}
+<header class="page-header d-flex flex-wrap align-items-end justify-content-between gap-3 mb-4">
+  <div>
+    <h1 class="page-title mb-1">{{ title }}</h1>
+    {% if subtitle %}<p class="page-subtitle mb-0">{{ subtitle }}</p>{% endif %}
+  </div>
+  {% if actions %}<div class="page-actions d-flex flex-wrap gap-2">{{ actions }}</div>{% endif %}
+</header>
+{% endmacro %}
+
+{% macro status_badge(status) %}
+<span class="badge rounded-pill badge-status badge-status-{{ status }}">{{ status | status_pt }}</span>
+{% endmacro %}
+
+{% macro stage_badge(stage) %}
+{% if stage %}
+<span class="badge rounded-pill text-bg-light border">{{ stage | stage_pt }}</span>
+{% else %}
+<span class="text-muted">—</span>
+{% endif %}
+{% endmacro %}
+
+{% macro progress_bar(pct, label=None) %}
+<div class="progress progress-app" role="progressbar"
+     aria-valuenow="{{ pct }}" aria-valuemin="0" aria-valuemax="100"
+     aria-label="{{ label or 'Progresso do job' }}">
+  <div class="progress-bar" style="width: {{ pct }}%">{{ pct }}%</div>
+</div>
+{% endmacro %}
+
+{% macro empty_state(title, message, icon="inbox") %}
+<div class="empty-state text-center py-5 px-3">
+  <div class="empty-state-icon mb-3" aria-hidden="true">
+    <i class="bi bi-{{ icon }}"></i>
+  </div>
+  <h2 class="h5">{{ title }}</h2>
+  <p class="text-muted mb-0">{{ message }}</p>
+</div>
+{% endmacro %}
+
+{% macro breadcrumb(items) %}
+<nav aria-label="breadcrumb" class="mb-3">
+  <ol class="breadcrumb breadcrumb-app mb-0">
+    {% for label, url in items %}
+      {% if url %}
+      <li class="breadcrumb-item"><a href="{{ url }}">{{ label }}</a></li>
+      {% else %}
+      <li class="breadcrumb-item active" aria-current="page">{{ label }}</li>
+      {% endif %}
+    {% endfor %}
+  </ol>
+</nav>
+{% endmacro %}
+
+{% macro cancel_job_button(job, compact=false) %}
+{% if job.status in ('queued', 'running') %}
+<form action="/web/jobs/{{ job.id }}/cancel" method="post" class="d-inline"
+      onsubmit="return confirm('Cancelar este job? O processamento será interrompido.');">
+  <button type="submit" class="btn btn-sm btn-outline-warning" title="Cancelar job">
+    <i class="bi bi-x-circle{% if not compact %} me-1{% endif %}" aria-hidden="true"></i>{% if not compact %}Cancelar{% endif %}
+  </button>
+</form>
+{% endif %}
+{% endmacro %}
+
+{% macro delete_job_button(job, compact=false) %}
+<form action="/web/jobs/{{ job.id }}/delete" method="post" class="d-inline"
+      onsubmit="return confirm('Excluir este job e TUDO relacionado (vídeo, fotos, clipes, eventos e relatórios)? Esta ação não pode ser desfeita.');">
+  <button type="submit" class="btn btn-sm btn-outline-danger" title="Excluir job">
+    <i class="bi bi-trash{% if not compact %} me-1{% endif %}" aria-hidden="true"></i>{% if not compact %}Excluir{% endif %}
+  </button>
+</form>
+{% endmacro %}
+
+{% macro media_toolbar(view_url, download_url) %}
+<div class="d-flex flex-wrap gap-2 mb-2">
+  <a class="btn btn-sm btn-outline-primary" href="{{ view_url }}" target="_blank" rel="noopener">
+    <i class="bi bi-play-circle me-1"></i>Abrir
+  </a>
+  <a class="btn btn-sm btn-outline-secondary" href="{{ download_url }}">
+    <i class="bi bi-download me-1"></i>Baixar
+  </a>
+</div>
+{% endmacro %}
+
+{% macro video_block(title, view_url, download_url, max_height='320px') %}
+<div class="video-block mb-3">
+  <h6 class="small text-uppercase text-muted mb-2">{{ title }}</h6>
+  {{ media_toolbar(view_url, download_url) }}
+  <video src="{{ view_url }}" controls class="w-100 rounded border" style="max-height:{{ max_height }};background:#000"></video>
+</div>
+{% endmacro %}
+
+{% macro video_original_bbox_pair(original_view, original_dl, bbox_view, bbox_dl, original_title='Original', bbox_title='Com bbox (YOLO)') %}
+<div class="row g-3">
+  <div class="col-md-6">
+    {{ video_block(original_title, original_view, original_dl) }}
+  </div>
+  <div class="col-md-6">
+    {{ video_block(bbox_title, bbox_view, bbox_dl) }}
+  </div>
+</div>
+{% endmacro %}
+
+{% macro job_export_buttons(job) %}
+{% if job.status == 'done' %}
+<div class="btn-group btn-group-sm flex-wrap" role="group" aria-label="Exportar job">
+  <a class="btn btn-outline-primary btn-sm" href="/jobs/{{ job.id }}/reports/html" target="_blank" title="HTML">HTML</a>
+  <a class="btn btn-outline-primary btn-sm" href="/jobs/{{ job.id }}/reports/json" title="JSON">JSON</a>
+  <a class="btn btn-outline-primary btn-sm" href="/jobs/{{ job.id }}/reports/csv" title="CSV">CSV</a>
+  <a class="btn btn-outline-primary btn-sm" href="/jobs/{{ job.id }}/reports/pdf" title="PDF">PDF</a>
+  <a class="btn btn-outline-secondary btn-sm" href="/jobs/{{ job.id }}/supercut" title="Ver supercut">Supercut</a>
+  <a class="btn btn-outline-secondary btn-sm" href="/jobs/{{ job.id }}/supercut?download=1" title="Baixar supercut">↓ Supercut</a>
+</div>
+{% endif %}
+{% endmacro %}
+
+{% macro batch_export_buttons(batch) %}
+<div class="btn-group flex-wrap" role="group" aria-label="Exportar lote">
+  <a class="btn btn-outline-primary btn-sm" href="/lotes/{{ batch.slug }}/reports/html" target="_blank">HTML</a>
+  <a class="btn btn-outline-primary btn-sm" href="/lotes/{{ batch.slug }}/reports/json">JSON</a>
+  <a class="btn btn-outline-primary btn-sm" href="/lotes/{{ batch.slug }}/reports/csv">CSV</a>
+  <a class="btn btn-outline-primary btn-sm" href="/lotes/{{ batch.slug }}/reports.zip">ZIP relatórios</a>
+  <a class="btn btn-outline-secondary btn-sm" href="/lotes/{{ batch.slug }}/supercuts.zip">ZIP supercuts</a>
+</div>
+{% endmacro %}
+
+{% macro event_times(e) %}
+<div class="event-times small">
+  <div><span class="text-muted">Detecção</span> <time>{{ (e.detection_time_sec if e.detection_time_sec is not none else e.start_time_raw_sec) | hms }}</time></div>
+  <div class="text-muted"><time>{{ e.start_time_raw_sec | hms }}</time> — <time>{{ e.end_time_sec | hms }}</time></div>
+</div>
+{% endmacro %}

@@ -1,36 +1,53 @@
 {% extends "base.html" %}
-{% block title %}Jobs{% endblock %}
+{% from "macros.html" import page_header, status_badge, progress_bar, stage_badge, empty_state, cancel_job_button, delete_job_button, job_export_buttons %}
+{% block title %}Jobs — Analisador{% endblock %}
 {% block content %}
-<h1>Jobs</h1>
-<table class="table">
-  <thead>
-    <tr><th>ID</th><th>Vídeo</th><th>Lote</th><th>Status</th><th>Progresso</th><th>Frames</th><th>Etapa</th><th>Erro</th></tr>
-  </thead>
-  <tbody>
-  {% for job in jobs %}
-    <tr>
-      <td><code>{{ job.id[:8] }}…</code></td>
-      <td>{{ job.video_id }}</td>
-      <td>
-        {% if job.batch_id and batches.get(job.batch_id) %}
-        <a href="/lotes/{{ batches[job.batch_id].slug }}">{{ batches[job.batch_id].slug }}</a>
-        {% else %}—{% endif %}
-      </td>
-      <td>{{ job.status }}</td>
-      <td>
-        <div class="progress" style="height:20px">
-          <div class="progress-bar" style="width:{{ job.progress_pct }}%">{{ job.progress_pct }}%</div>
-        </div>
-      </td>
-      <td class="small">
-        {% if job.frames_total %}
-        {{ job.frames_done or 0 }}/{{ job.frames_total }}
-        {% else %}—{% endif %}
-      </td>
-      <td>{{ job.stage or '—' }}</td>
-      <td class="text-danger small">{{ job.error_message or '' }}</td>
-    </tr>
-  {% endfor %}
-  </tbody>
-</table>
+{{ page_header("Jobs", "Acompanhe fila, progresso por frame e erros de processamento.") }}
+
+{% if jobs %}
+<div class="table-responsive">
+  <table class="table table-app table-hover mb-0">
+    <thead>
+      <tr>
+        <th>Job</th><th>Vídeo</th><th>Lote</th><th>Status</th>
+        <th>Progresso</th><th>Frames</th><th>Etapa</th><th>Exportar</th><th>Ações</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for job in jobs %}
+      <tr>
+        <td><a href="/jobs/{{ job.id }}"><code>{{ job.id[:8] }}…</code></a></td>
+        <td>
+          {% if videos.get(job.video_id) %}
+          <span class="d-block text-truncate" style="max-width:14rem" title="{{ videos[job.video_id].filename }}">
+            {{ videos[job.video_id].filename }}
+          </span>
+          <span class="small text-muted">#{{ job.video_id }}</span>
+          {% else %}#{{ job.video_id }}{% endif %}
+        </td>
+        <td>
+          {% if job.batch_id and batches.get(job.batch_id) %}
+          <a href="/lotes/{{ batches[job.batch_id].slug }}">{{ batches[job.batch_id].slug }}</a>
+          {% else %}—{% endif %}
+        </td>
+        <td>{{ status_badge(job.status) }}</td>
+        <td style="min-width:9rem">{{ progress_bar(job.progress_pct) }}</td>
+        <td class="small font-monospace">
+          {% if job.frames_total %}{{ job.frames_done or 0 }}/{{ job.frames_total }}{% else %}—{% endif %}
+        </td>
+        <td>{{ stage_badge(job.stage) }}</td>
+        <td>{{ job_export_buttons(job) }}</td>
+        <td class="text-nowrap">
+          {{ cancel_job_button(job, compact=true) }}
+          {{ delete_job_button(job, compact=true) }}
+          {% if job.error_message %}<span class="d-block small text-danger mt-1">{{ job.error_message }}</span>{% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+{{ empty_state("Nenhum job na fila", "Inicie um processamento na página inicial.", "cpu") }}
+{% endif %}
 {% endblock %}

@@ -9,6 +9,12 @@ from analisador_videos.config import settings
 from analisador_videos.db import database
 from analisador_videos.db.models import Artifact, Event, Job, Track, Video
 from analisador_videos.ingest.service import probe_video
+from analisador_videos.jobs.cancel import (
+    JobCancelledError,
+    clear_cancelled,
+    ensure_not_cancelled,
+    is_job_cancelled,
+)
 from analisador_videos.jobs.progress import update_job
 from analisador_videos.media.clips import clip_time_range, extract_clip
 from analisador_videos.media.frame_cache import (
@@ -44,11 +50,14 @@ def process_video_job(job_id: str) -> None:
         if not video:
             update_job(db, job_id, status="failed", error_message="Vídeo não encontrado")
             return
+        if is_job_cancelled(db, job_id):
+            return
 
         video_path = Path(video.path)
         profile = resolve_runtime()
         cache_dir = settings.data_dir / "temp" / job_id
         try:
+            ensure_not_cancelled(db, job_id)
             video.status = "processing"
             job.status = "running"
             db.commit()
@@ -58,7 +67,33 @@ def process_video_job(job_id: str) -> None:
             video.processed_at = datetime.utcnow()
             update_job(db, job_id, status="done", progress_pct=100, stage="done")
             db.commit()
+            clear_cancelled(job_id)
+        except JobCancelledError:
+            if video.status == "processing":
+                video.status = "pending"
+            update_job(
+                db,
+                job_id,
+                status="cancelled",
+                error_message="Cancelado pelo usuário",
+                stage="cancelled",
+            )
+            db.commit()
+            clear_cancelled(job_id)
         except Exception as exc:
+            if is_job_cancelled(db, job_id):
+                if video.status == "processing":
+                    video.status = "pending"
+                update_job(
+                    db,
+                    job_id,
+                    status="cancelled",
+                    error_message="Cancelado pelo usuário",
+                    stage="cancelled",
+                )
+                db.commit()
+                clear_cancelled(job_id)
+                return
             if settings.allow_cpu_fallback and profile.backend == "cuda":
                 try:
                     from analisador_videos.config import Settings as Cfg
@@ -106,6 +141,7 @@ def _run_pipeline(
     cfg = cfg or settings
     job_id = job.id
 
+    ensure_not_cancelled(db, job_id)
     update_job(db, job_id, stage="ingest", progress_pct=5)
     meta = probe_video(video_path)
     video.duration_sec = meta["duration_sec"]
@@ -130,6 +166,8 @@ def _run_pipeline(
         db.commit()
 
     def on_detect_progress(done: int, total: int) -> None:
+        if done % max(cfg.progress_update_every_n_frames, 1) == 0 or done >= total:
+            ensure_not_cancelled(db, job_id)
         pct = 5 + int((done / max(total, 1)) * 65)
         update_job(
             db,
@@ -166,6 +204,7 @@ def _run_pipeline(
         )
     db.commit()
 
+    ensure_not_cancelled(db, job_id)
     update_job(db, job_id, stage="merge", progress_pct=72)
     diag = frame_diagonal(video.width or 0, video.height or 0)
     merged = merge_tracks(
@@ -212,18 +251,31 @@ def _run_pipeline(
     total_ev = max(len(events), 1)
 
     for i, event in enumerate(events):
+        ensure_not_cancelled(db, job_id)
         snap_path = snap_dir / f"video{video.id}_event{event.id}.jpg"
         thumb_path = thumb_dir / f"video{video.id}_event{event.id}_thumb.jpg"
+        snap_start = snap_dir / f"video{video.id}_event{event.id}_start.jpg"
+        thumb_start = thumb_dir / f"video{video.id}_event{event.id}_start_thumb.jpg"
+        snap_end = snap_dir / f"video{video.id}_event{event.id}_end.jpg"
+        thumb_end = thumb_dir / f"video{video.id}_event{event.id}_end_thumb.jpg"
         clip_path = clip_dir / f"video{video.id}_event{event.id}.mp4"
-        t_cap = event.detection_time_sec or event.start_time_raw_sec
         bbox = None
         if event.bbox_json:
             bbox = tuple(json.loads(event.bbox_json))
+        t_cap = event.detection_time_sec or event.start_time_raw_sec
         capture_snapshot(video_path, t_cap, snap_path, bbox=bbox)
         make_thumbnail(snap_path, thumb_path)
+        capture_snapshot(video_path, event.start_time_raw_sec, snap_start, bbox=bbox)
+        make_thumbnail(snap_start, thumb_start)
+        capture_snapshot(video_path, event.end_time_sec, snap_end, bbox=bbox)
+        make_thumbnail(snap_end, thumb_end)
         extract_clip(video_path, event.start_time_sec, event.end_time_sec, clip_path)
         event.snapshot_path = snap_path.as_posix()
         event.thumbnail_path = thumb_path.as_posix()
+        event.interval_start_snapshot_path = snap_start.as_posix()
+        event.interval_start_thumbnail_path = thumb_start.as_posix()
+        event.interval_end_snapshot_path = snap_end.as_posix()
+        event.interval_end_thumbnail_path = thumb_end.as_posix()
         event.clip_path = clip_path.as_posix()
         pct = 75 + int(((i + 1) / total_ev) * 20)
         update_job(db, job_id, stage="media", progress_pct=pct)
@@ -265,6 +317,7 @@ def _write_reports(db, job: Job, video: Video, events: list[Event]) -> None:
         events,
         params,
         max_thumbnails=settings.pdf_max_thumbnails,
+        db=db,
     )
     db.commit()
 

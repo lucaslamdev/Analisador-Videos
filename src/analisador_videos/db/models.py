@@ -14,6 +14,10 @@ class Batch(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     slug: Mapped[str] = mapped_column(String(128), unique=True, nullable=False, index=True)
     sequence_num: Mapped[int] = mapped_column(Integer, nullable=False)
+    parent_batch_id: Mapped[int | None] = mapped_column(
+        ForeignKey("batches.id"), nullable=True
+    )
+    analysis_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, default=datetime.utcnow
     )
@@ -55,6 +59,10 @@ class Job(Base):
     stage: Mapped[str | None] = mapped_column(String(32), nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     params_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    parent_job_id: Mapped[str | None] = mapped_column(
+        ForeignKey("jobs.id"), nullable=True
+    )
+    analysis_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     frames_done: Mapped[int | None] = mapped_column(Integer, nullable=True)
     frames_total: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
@@ -98,7 +106,13 @@ class Event(Base):
     bbox_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     snapshot_path: Mapped[str | None] = mapped_column(Text, nullable=True)
     clip_path: Mapped[str | None] = mapped_column(Text, nullable=True)
+    clip_annotated_path: Mapped[str | None] = mapped_column(Text, nullable=True)
+    clip_annotated_sensitive_path: Mapped[str | None] = mapped_column(Text, nullable=True)
     thumbnail_path: Mapped[str | None] = mapped_column(Text, nullable=True)
+    interval_start_snapshot_path: Mapped[str | None] = mapped_column(Text, nullable=True)
+    interval_start_thumbnail_path: Mapped[str | None] = mapped_column(Text, nullable=True)
+    interval_end_snapshot_path: Mapped[str | None] = mapped_column(Text, nullable=True)
+    interval_end_thumbnail_path: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     video: Mapped["Video"] = relationship(back_populates="events")
 

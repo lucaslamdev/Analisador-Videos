@@ -50,9 +50,17 @@ def run_sync(job_id: str) -> None:
 
 
 async def run_async(job_id: str) -> None:
+    from analisador_videos.db import database
+    from analisador_videos.jobs.cancel import is_job_cancelled
     from analisador_videos.pipeline.runner import process_video_job
 
     async def _run():
+        if database.SessionLocal is None:
+            database.init_engine()
+        assert database.SessionLocal is not None
+        with database.SessionLocal() as db:
+            if is_job_cancelled(db, job_id):
+                return
         await asyncio.to_thread(process_video_job, job_id)
 
     await run_with_slot(_run)

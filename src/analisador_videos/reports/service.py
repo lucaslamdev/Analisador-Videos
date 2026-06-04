@@ -53,6 +53,7 @@ def ensure_video_report(db: Session, video: Video, fmt: str) -> Path:
             events,
             params,
             max_thumbnails=settings.pdf_max_thumbnails,
+            db=db,
         )
         return path
     raise ValueError(f"Formato inválido: {fmt}")

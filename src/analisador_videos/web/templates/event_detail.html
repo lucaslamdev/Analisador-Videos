@@ -1,27 +1,87 @@
 {% extends "base.html" %}
-{% block title %}Evento {{ event.id }}{% endblock %}
+{% from "macros.html" import breadcrumb, page_header, event_times, video_block %}
+{% block title %}Evento #{{ event.id }} — Analisador{% endblock %}
 {% block content %}
-<h1>Evento #{{ event.id }}</h1>
-<p>
-  <span class="badge bg-info">{{ event.class_name }}</span>
-  — Vídeo: {{ video.filename if video else event.video_id }}
-  {% if batch %}<span class="badge bg-secondary ms-2"><a class="text-white text-decoration-none" href="/lotes/{{ batch.slug }}">{{ batch.slug }}</a></span>{% endif %}
-</p>
-<p>Intervalo (com padding): {{ event.start_time_sec | hms }} — {{ event.end_time_sec | hms }}</p>
-<p>Horário da detecção: <strong>{{ (event.detection_time_sec if event.detection_time_sec is not none else event.start_time_raw_sec) | hms }}</strong></p>
-<p>Início bruto (track): {{ event.start_time_raw_sec | hms }}</p>
-<p>Tracks fundidos: <code>{{ event.merged_track_ids }}</code></p>
-<p>Confiança média: {{ "%.2f"|format(event.avg_confidence) }}</p>
+{{ breadcrumb([("Início", "/"), ("Eventos", "/events"), ("#" ~ event.id, None)]) }}
 
-{% if event.snapshot_path %}
-<h3>Snapshot (com bbox)</h3>
-<img src="/media/{{ event.snapshot_path }}" class="img-fluid mb-3" alt="snapshot">
-{% endif %}
+<div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+  <span class="badge rounded-pill badge-class fs-6">{{ event.class_name | class_pt }}</span>
+  {% if batch %}
+  <a href="/lotes/{{ batch.slug }}" class="badge rounded-pill text-bg-secondary text-decoration-none">{{ batch.slug }}</a>
+  {% endif %}
+</div>
 
-{% if event.clip_path %}
-<h3>Clipe</h3>
-<video src="/media/{{ event.clip_path }}" controls class="w-100 mb-3"></video>
-{% endif %}
+{{ page_header("Evento #" ~ event.id, video.filename if video else "Vídeo #" ~ event.video_id) }}
 
-<a href="/events?video_id={{ event.video_id }}" class="btn btn-link mt-3">← Voltar</a>
+<div class="detail-grid">
+  <div class="card card-app">
+    <div class="card-header">Metadados</div>
+    <div class="card-body">
+      {{ event_times(event) }}
+      <ul class="meta-list mt-3">
+        <li><span class="meta-label">Intervalo (padding)</span><span class="meta-value">{{ event.start_time_sec | hms }} — {{ event.end_time_sec | hms }}</span></li>
+        <li><span class="meta-label">Início bruto</span><span class="meta-value">{{ event.start_time_raw_sec | hms }}</span></li>
+        <li><span class="meta-label">Confiança média</span><span class="meta-value">{{ "%.0f"|format(event.avg_confidence * 100) }}%</span></li>
+        <li><span class="meta-label">Tracks</span><span class="meta-value"><code class="small">{{ event.merged_track_ids }}</code></span></li>
+      </ul>
+      <a href="/events?video_id={{ event.video_id }}" class="btn btn-outline-secondary mt-3">
+        <i class="bi bi-arrow-left me-1"></i>Voltar à galeria
+      </a>
+    </div>
+  </div>
+
+  <div class="d-flex flex-column gap-3">
+    {% if event.snapshot_path %}
+    <div class="card card-app media-panel">
+      <div class="card-header">Snapshot com bbox</div>
+      <div class="card-body p-2">
+        <a href="/media/{{ event.snapshot_path }}" target="_blank" rel="noopener noreferrer">
+          <img src="/media/{{ event.snapshot_path }}" class="img-fluid w-100" alt="Snapshot">
+        </a>
+      </div>
+    </div>
+    {% endif %}
+
+    {% if event.clip_path %}
+    <div class="card card-app media-panel">
+      <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+        <span>Clipe do evento</span>
+        <div class="d-flex flex-wrap gap-2">
+          <form action="/web/events/{{ event.id }}/annotate-clip" method="post" class="d-inline"
+                onsubmit="return confirm('Gerar bbox padrão (~50% confiança)?');">
+            <button type="submit" class="btn btn-sm btn-outline-secondary">
+              <i class="bi bi-bounding-box me-1"></i>Bbox padrão
+            </button>
+          </form>
+          <form action="/web/events/{{ event.id }}/annotate-clip" method="post" class="d-inline"
+                onsubmit="return confirm('Gerar bbox sensível (~22% confiança)? Mais detecções em frames difíceis.');">
+            <input type="hidden" name="sensitive" value="true">
+            <button type="submit" class="btn btn-sm btn-outline-warning">
+              <i class="bi bi-bounding-box-circles me-1"></i>Bbox sensível
+            </button>
+          </form>
+        </div>
+      </div>
+      <div class="card-body p-2">
+        <p class="small text-muted">Comparação: original e versões anotadas (v1 e sensível são independentes).</p>
+        <div class="row g-3">
+          <div class="col-md-{% if event.clip_annotated_path and event.clip_annotated_sensitive_path %}4{% elif event.clip_annotated_path or event.clip_annotated_sensitive_path %}6{% else %}12{% endif %}">
+            {{ video_block('Original', '/events/' ~ event.id ~ '/clip', '/events/' ~ event.id ~ '/clip?download=1') }}
+          </div>
+          {% if event.clip_annotated_path %}
+          <div class="col-md-{% if event.clip_annotated_sensitive_path %}4{% else %}6{% endif %}">
+            {{ video_block('Bbox padrão', '/events/' ~ event.id ~ '/clip/annotated', '/events/' ~ event.id ~ '/clip/annotated?download=1') }}
+          </div>
+          {% endif %}
+          {% if event.clip_annotated_sensitive_path %}
+          <div class="col-md-{% if event.clip_annotated_path %}4{% else %}6{% endif %}">
+            {{ video_block('Bbox sensível', '/events/' ~ event.id ~ '/clip/annotated?sensitive=1', '/events/' ~ event.id ~ '/clip/annotated?sensitive=1&download=1') }}
+          </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+</div>
 {% endblock %}

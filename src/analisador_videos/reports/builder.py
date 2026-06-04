@@ -7,10 +7,12 @@ from pathlib import Path
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import cm
-from reportlab.platypus import Image, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 from reportlab.lib.styles import getSampleStyleSheet
 
 from analisador_videos.db.models import Artifact, Event, Video
+from analisador_videos.reports.evidence import append_pdf_interval_evidence
+from analisador_videos.util.class_labels import class_label_pt
 from analisador_videos.util.time_format import format_hms
 
 
@@ -21,7 +23,7 @@ def build_json_payload(
     params: dict,
     model_name: str = "yolo11n.pt",
 ) -> dict:
-    by_class = Counter(e.class_name for e in events)
+    by_class = Counter(class_label_pt(e.class_name) for e in events)
     return {
         "generated_at": datetime.utcnow().isoformat() + "Z",
         "model": model_name,
@@ -43,7 +45,8 @@ def build_json_payload(
         "events": [
             {
                 "id": e.id,
-                "class_name": e.class_name,
+                "class_name": class_label_pt(e.class_name),
+                "class_name_en": e.class_name,
                 "start_time_sec": e.start_time_sec,
                 "end_time_sec": e.end_time_sec,
                 "start_time_raw_sec": e.start_time_raw_sec,
@@ -59,6 +62,8 @@ def build_json_payload(
                 "merged_track_ids": json.loads(e.merged_track_ids),
                 "avg_confidence": e.avg_confidence,
                 "snapshot_path": e.snapshot_path,
+                "interval_start_snapshot_path": e.interval_start_snapshot_path,
+                "interval_end_snapshot_path": e.interval_end_snapshot_path,
                 "clip_path": e.clip_path,
             }
             for e in events
@@ -87,6 +92,7 @@ def write_csv_report(path: Path, events: list[Event]) -> None:
             fieldnames=[
                 "event_id",
                 "class_name",
+                "class_name_en",
                 "detection_time_hms",
                 "interval_hms",
                 "start_time_sec",
@@ -109,7 +115,8 @@ def write_csv_report(path: Path, events: list[Event]) -> None:
             writer.writerow(
                 {
                     "event_id": e.id,
-                    "class_name": e.class_name,
+                    "class_name": class_label_pt(e.class_name),
+                    "class_name_en": e.class_name,
                     "detection_time_hms": format_hms(det),
                     "interval_hms": (
                         f"{format_hms(e.start_time_raw_sec)} — {format_hms(e.end_time_sec)}"
@@ -132,6 +139,7 @@ def write_pdf_report(
     events: list[Event],
     params: dict,
     max_thumbnails: int = 20,
+    db=None,
 ) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     styles = getSampleStyleSheet()
@@ -151,7 +159,7 @@ def write_pdf_report(
     story.append(Paragraph(f"Parâmetros: {json.dumps(params)}", styles["Normal"]))
     story.append(Spacer(1, 0.5 * cm))
 
-    by_class = Counter(e.class_name for e in events)
+    by_class = Counter(class_label_pt(e.class_name) for e in events)
     table_data = [["Classe", "Quantidade"]] + [[k, str(v)] for k, v in sorted(by_class.items())]
     if len(table_data) == 1:
         table_data.append(["—", "0"])
@@ -170,21 +178,14 @@ def write_pdf_report(
     story.append(Spacer(1, 0.5 * cm))
 
     story.append(Paragraph("Evidências", styles["Heading2"]))
+    story.append(
+        Paragraph(
+            "Para cada evento: captura no início e no fim do intervalo.",
+            styles["Normal"],
+        )
+    )
+    story.append(Spacer(1, 0.2 * cm))
     for e in events[:max_thumbnails]:
-        det = (
-            e.detection_time_sec
-            if e.detection_time_sec is not None
-            else e.start_time_raw_sec
-        )
-        story.append(
-            Paragraph(
-                f"Evento {e.id} — {e.class_name} | Detecção {format_hms(det)} | "
-                f"Intervalo {format_hms(e.start_time_raw_sec)} — {format_hms(e.end_time_sec)}",
-                styles["Normal"],
-            )
-        )
-        if e.snapshot_path and Path(e.snapshot_path).is_file():
-            story.append(Image(e.snapshot_path, width=8 * cm, height=6 * cm))
-        story.append(Spacer(1, 0.2 * cm))
+        append_pdf_interval_evidence(story, styles, video, e, db=db)
 
     doc.build(story)
