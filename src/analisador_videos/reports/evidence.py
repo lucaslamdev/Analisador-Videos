@@ -36,7 +36,7 @@ def _paths_for_side(event: Event, side: IntervalSide) -> tuple[str | None, str |
 
 
 def _set_paths_for_side(
-    event: Event, side: IntervalSide, snap: str, thumb: str
+    event: Event, side: IntervalSide, snap: str, thumb: str | None
 ) -> None:
     if side == "start":
         event.interval_start_snapshot_path = snap
@@ -83,18 +83,15 @@ def ensure_interval_snapshot(
         bbox = tuple(json.loads(event.bbox_json))
 
     if capture_snapshot(video_path, t, snap_path, bbox=bbox):
-        make_thumbnail(snap_path, thumb_path)
-    else:
-        if side == "start" and event.snapshot_path and Path(event.snapshot_path).is_file():
-            return Path(event.snapshot_path)
-        return None
+        thumb = thumb_path.as_posix() if make_thumbnail(snap_path, thumb_path) else None
+        _set_paths_for_side(event, side, snap_path.as_posix(), thumb)
+        if db is not None:
+            db.commit()
+        return snap_path
 
-    _set_paths_for_side(
-        event, side, snap_path.as_posix(), thumb_path.as_posix()
-    )
-    if db is not None:
-        db.commit()
-    return snap_path
+    if side == "start" and event.snapshot_path and Path(event.snapshot_path).is_file():
+        return Path(event.snapshot_path)
+    return None
 
 
 def interval_thumbnail_path(
