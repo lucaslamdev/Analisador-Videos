@@ -512,6 +512,7 @@ async def web_process_folder(
             status_code=303,
         )
     batch, slug = next_batch_slug(db)
+    seen_video_ids: set[int] = set()
     for p in paths:
         dest = copy_to_storage(p, settings.data_dir / "videos")
         sha = file_sha256(dest)
@@ -537,6 +538,9 @@ async def web_process_folder(
             db.add(video)
             db.commit()
             db.refresh(video)
+        if video.id in seen_video_ids:
+            continue
+        seen_video_ids.add(video.id)
         job = create_job(
             db, video.id, batch_id=batch.id, params_json=params_json
         )
