@@ -64,11 +64,25 @@
 {% endmacro %}
 
 {% macro retry_job_button(job, compact=false) %}
-{% if job.status in ('failed', 'cancelled') %}
-<form action="/web/jobs/{{ job.id }}/retry" method="post" class="d-inline"
-      onsubmit="return confirm('Criar novo job e reprocessar este vídeo?');">
-  <button type="submit" class="btn btn-sm btn-outline-primary" title="Reprocessar vídeo">
+{{ reprocess_job_buttons(job, compact=compact) }}
+{% endmacro %}
+
+{% macro reprocess_job_buttons(job, compact=false) %}
+{% if job.status in ('done', 'failed', 'cancelled') %}
+<form action="/web/jobs/{{ job.id }}/reprocess" method="post" class="d-inline"
+      onsubmit="return confirm('Reprocessar este vídeo com detecção padrão? Mídia e eventos anteriores serão substituídos.');">
+  <input type="hidden" name="sensitive" value="0">
+  <input type="hidden" name="keep_batch" value="1">
+  <button type="submit" class="btn btn-sm btn-outline-primary" title="Reprocessar com detecção padrão">
     <i class="bi bi-arrow-clockwise{% if not compact %} me-1{% endif %}" aria-hidden="true"></i>{% if not compact %}Reprocessar{% endif %}
+  </button>
+</form>
+<form action="/web/jobs/{{ job.id }}/reprocess" method="post" class="d-inline"
+      onsubmit="return confirm('Reprocessar com detecção sensível (limiares mais baixos)? Pode gerar mais falsos positivos.');">
+  <input type="hidden" name="sensitive" value="1">
+  <input type="hidden" name="keep_batch" value="1">
+  <button type="submit" class="btn btn-sm btn-outline-warning" title="Reprocessar com detecção sensível">
+    <i class="bi bi-eye{% if not compact %} me-1{% endif %}" aria-hidden="true"></i>{% if not compact %}Sensível{% else %}S{% endif %}
   </button>
 </form>
 {% endif %}

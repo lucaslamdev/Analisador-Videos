@@ -16,6 +16,7 @@ from analisador_videos.jobs.cancel import (
     ensure_not_cancelled,
     is_job_cancelled,
 )
+from analisador_videos.jobs.detection_params import detection_settings_for_job
 from analisador_videos.jobs.progress import update_job
 from analisador_videos.media.clips import clip_time_range, extract_clip
 from analisador_videos.media.frame_cache import (
@@ -185,7 +186,7 @@ def _run_pipeline(
     cache_dir: Path,
     cfg=None,
 ) -> list[str]:
-    cfg = cfg or settings
+    cfg = cfg or detection_settings_for_job(job.params_json)
     job_id = job.id
 
     ensure_not_cancelled(db, job_id)

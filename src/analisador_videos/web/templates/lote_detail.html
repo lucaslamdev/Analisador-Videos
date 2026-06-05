@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros.html" import breadcrumb, page_header, status_badge, event_times, empty_state, cancel_job_button, delete_job_button, job_export_buttons, batch_export_buttons %}
+{% from "macros.html" import breadcrumb, page_header, status_badge, event_times, empty_state, cancel_job_button, delete_job_button, reprocess_job_buttons, job_export_buttons, batch_export_buttons %}
 {% block title %}Lote {{ batch.slug }} — Analisador{% endblock %}
 {% block content %}
 {{ breadcrumb([("Início", "/"), (batch.slug, None)]) }}
@@ -64,6 +64,7 @@
         <td class="small">{{ job.progress_pct }}%</td>
         <td>{{ job_export_buttons(job) }}</td>
         <td class="text-nowrap">
+          {{ reprocess_job_buttons(job, compact=true) }}
           {{ cancel_job_button(job, compact=true) }}
           {{ delete_job_button(job, compact=true) }}
         </td>

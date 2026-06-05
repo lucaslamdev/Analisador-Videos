@@ -1,3 +1,4 @@
+import asyncio
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -8,7 +9,7 @@ from analisador_videos.db.database import get_db
 from analisador_videos.db.models import Job
 from analisador_videos.jobs.cancel import cancel_job
 from analisador_videos.jobs.delete import delete_job
-from analisador_videos.jobs.retry import create_retry_job
+from analisador_videos.jobs.reprocess import create_reprocess_job, create_retry_job
 from analisador_videos.jobs.service import run_async
 from analisador_videos.jobs.sensitive_v2 import create_sensitive_bbox_v2_for_job, find_job_v2
 from analisador_videos.reports.job_exports import ensure_job_report, job_supercut_path
@@ -27,6 +28,7 @@ _MEDIA = {
 
 @router.post("/jobs/{job_id}/retry")
 async def retry_job_endpoint(job_id: str, db: Session = Depends(get_db)):
+    """Compat: reprocessar jobs failed/cancelled (mesmos parâmetros)."""
     try:
         new_job = create_retry_job(db, job_id)
     except ValueError as exc:
@@ -44,6 +46,32 @@ async def retry_job_endpoint(job_id: str, db: Session = Depends(get_db)):
         "video_id": new_job.video_id,
         "status": new_job.status,
         "message": retry_messages.get(new_job.status, "Reprocessamento enfileirado"),
+    }
+
+
+@router.post("/jobs/{job_id}/reprocess")
+async def reprocess_job_endpoint(
+    job_id: str,
+    sensitive: bool = Query(False, description="Detecção com limiares mais baixos"),
+    keep_batch: bool = Query(True, description="Manter vídeo no lote original"),
+    db: Session = Depends(get_db),
+):
+    """Reprocessar um único job (done/failed/cancelled), fora do fluxo do lote inteiro."""
+    try:
+        new_job = create_reprocess_job(
+            db, job_id, sensitive=sensitive, keep_batch=keep_batch
+        )
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    asyncio.create_task(run_async(new_job.id))
+    return {
+        "previous_job_id": job_id,
+        "job_id": new_job.id,
+        "video_id": new_job.video_id,
+        "batch_id": new_job.batch_id,
+        "status": new_job.status,
+        "sensitive": sensitive,
+        "message": "Reprocessamento enfileirado",
     }
 
 

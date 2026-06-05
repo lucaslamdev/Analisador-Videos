@@ -31,14 +31,22 @@ def job_params_snapshot() -> str:
     )
 
 
-def create_job(db: Session, video_id: int, batch_id: int | None = None) -> Job:
+def create_job(
+    db: Session,
+    video_id: int,
+    batch_id: int | None = None,
+    *,
+    params_json: str | None = None,
+    parent_job_id: str | None = None,
+) -> Job:
     job = Job(
         id=str(uuid.uuid4()),
         video_id=video_id,
         batch_id=batch_id,
+        parent_job_id=parent_job_id,
         status="queued",
         progress_pct=0,
-        params_json=job_params_snapshot(),
+        params_json=params_json or job_params_snapshot(),
     )
     db.add(job)
     db.commit()
