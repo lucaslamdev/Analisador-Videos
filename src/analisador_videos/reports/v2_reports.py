@@ -31,8 +31,6 @@ def ensure_video_report_v2(
     report_dir.mkdir(parents=True, exist_ok=True)
     if fmt == "pdf":
         path = report_dir / pdf_report_filename(video.id, quality, v2=True)
-        if path.is_file():
-            return path
         events = list(
             db.scalars(
                 select(Event)

@@ -51,7 +51,8 @@ def prepare_image_for_pdf(source: Path, cache_key: str, quality: str) -> Path:
     cache_dir.mkdir(parents=True, exist_ok=True)
     stat = source.stat()
     digest = hashlib.sha256(
-        f"{source.resolve()}:{stat.st_mtime_ns}:{stat.st_size}".encode()
+        f"{source.resolve()}:{stat.st_mtime_ns}:{stat.st_size}:"
+        f"{settings.pdf_compact_max_width}:{settings.pdf_compact_jpeg_quality}".encode()
     ).hexdigest()[:16]
     dest = cache_dir / f"{cache_key}_{digest}.jpg"
     if dest.is_file():
