@@ -31,12 +31,18 @@ async def retry_job_endpoint(job_id: str, db: Session = Depends(get_db)):
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
     await run_async(new_job.id)
+    db.refresh(new_job)
+    retry_messages = {
+        "done": "Reprocessamento concluído",
+        "failed": "Reprocessamento falhou",
+        "cancelled": "Reprocessamento cancelado",
+    }
     return {
         "previous_job_id": job_id,
         "job_id": new_job.id,
         "video_id": new_job.video_id,
-        "status": "queued",
-        "message": "Reprocessamento enfileirado",
+        "status": new_job.status,
+        "message": retry_messages.get(new_job.status, "Reprocessamento enfileirado"),
     }
 
 
