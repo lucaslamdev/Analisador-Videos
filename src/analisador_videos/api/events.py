@@ -75,7 +75,11 @@ def list_events(
 def delete_event_endpoint(event_id: int, db: Session = Depends(get_db)):
     if not delete_event(db, event_id):
         raise HTTPException(404, "Evento não encontrado")
-    return {"event_id": event_id, "deleted": True}
+    return {
+        "event_id": event_id,
+        "deleted": True,
+        "reports_regenerated": True,
+    }
 
 
 @router.get("/events/{event_id}")
