@@ -1,5 +1,7 @@
+import asyncio
 from collections import Counter
 from pathlib import Path
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, File, Form, Query, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -20,6 +22,7 @@ from analisador_videos.ingest.service import (
 )
 from analisador_videos.jobs.cancel import cancel_batch_jobs, cancel_job
 from analisador_videos.jobs.delete import delete_batch, delete_job
+from analisador_videos.jobs.retry import create_retry_job
 from analisador_videos.jobs.service import create_job, run_async
 from analisador_videos.jobs.sensitive_v2 import (
     create_sensitive_bbox_v2_for_batch,
@@ -151,6 +154,7 @@ def job_detail_page(job_id: str, request: Request, db: Session = Depends(get_db)
     if video and job.status == "done":
         video_supercuts = list_supercuts_for_video(db, video.id)
         job_v2 = find_job_v2(db, job_id)
+    retry_error = request.query_params.get("retry_error")
     return templates.TemplateResponse(
         request,
         "job_detail.html",
@@ -162,6 +166,7 @@ def job_detail_page(job_id: str, request: Request, db: Session = Depends(get_db)
                 "video": video,
                 "batch": batch,
                 "video_supercuts": video_supercuts,
+                "retry_error": retry_error,
             }
         ),
     )
@@ -307,6 +312,23 @@ def lote_detail(slug: str, request: Request, db: Session = Depends(get_db)):
     )
 
 
+@router.post("/web/jobs/{job_id}/retry")
+async def web_retry_job(
+    job_id: str,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    try:
+        new_job = create_retry_job(db, job_id)
+    except ValueError as exc:
+        return RedirectResponse(
+            f"/jobs/{job_id}?retry_error={quote(str(exc))}",
+            status_code=303,
+        )
+    await run_async(new_job.id)
+    return RedirectResponse(f"/jobs/{new_job.id}", status_code=303)
+
+
 @router.post("/web/jobs/{job_id}/cancel")
 def web_cancel_job(
     job_id: str,
@@ -403,6 +425,7 @@ async def web_process_folder(db: Session = Depends(get_db)):
             status_code=303,
         )
     batch, slug = next_batch_slug(db)
+    pending: list = []
     for p in paths:
         dest = copy_to_storage(p, settings.data_dir / "videos")
         sha = file_sha256(dest)
@@ -429,7 +452,9 @@ async def web_process_folder(db: Session = Depends(get_db)):
             db.commit()
             db.refresh(video)
         job = create_job(db, video.id, batch_id=batch.id)
-        await run_async(job.id)
+        pending.append(run_async(job.id))
+    if pending:
+        await asyncio.gather(*pending, return_exceptions=True)
     return RedirectResponse(f"/lotes/{slug}", status_code=303)
 
 

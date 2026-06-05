@@ -24,6 +24,8 @@ def _thumb_for_snapshot(snap: Path) -> Path:
 def _interval_time_sec(event: Event, side: IntervalSide) -> float:
     if side == "start":
         return event.start_time_raw_sec
+    if event.end_time_raw_sec is not None:
+        return event.end_time_raw_sec
     return event.end_time_sec
 
 
@@ -80,10 +82,9 @@ def ensure_interval_snapshot(
     if event.bbox_json:
         bbox = tuple(json.loads(event.bbox_json))
 
-    try:
-        capture_snapshot(video_path, t, snap_path, bbox=bbox)
+    if capture_snapshot(video_path, t, snap_path, bbox=bbox):
         make_thumbnail(snap_path, thumb_path)
-    except (ValueError, OSError):
+    else:
         if side == "start" and event.snapshot_path and Path(event.snapshot_path).is_file():
             return Path(event.snapshot_path)
         return None

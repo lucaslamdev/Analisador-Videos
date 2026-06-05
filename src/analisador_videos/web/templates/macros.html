@@ -63,6 +63,33 @@
 {% endif %}
 {% endmacro %}
 
+{% macro retry_job_button(job, compact=false) %}
+{% if job.status in ('failed', 'cancelled') %}
+<form action="/web/jobs/{{ job.id }}/retry" method="post" class="d-inline"
+      onsubmit="return confirm('Criar novo job e reprocessar este vídeo?');">
+  <button type="submit" class="btn btn-sm btn-outline-primary" title="Reprocessar vídeo">
+    <i class="bi bi-arrow-clockwise{% if not compact %} me-1{% endif %}" aria-hidden="true"></i>{% if not compact %}Reprocessar{% endif %}
+  </button>
+</form>
+{% endif %}
+{% endmacro %}
+
+{% macro job_error_detail(job, compact=false) %}
+{% if job.error_message %}
+  {% if job.status == 'done' %}
+  <div class="alert alert-warning py-2 px-2 mb-0{% if compact %} small{% endif %}">
+    <strong class="d-block mb-1"><i class="bi bi-exclamation-triangle me-1"></i>Avisos</strong>
+    <pre class="job-error-pre mb-0">{{ job.error_message }}</pre>
+  </div>
+  {% else %}
+  <details class="job-error-details{% if compact %} job-error-details-compact{% endif %}">
+    <summary class="text-danger fw-semibold small">Ver erro completo</summary>
+    <pre class="job-error-pre">{{ job.error_message }}</pre>
+  </details>
+  {% endif %}
+{% endif %}
+{% endmacro %}
+
 {% macro delete_job_button(job, compact=false) %}
 <form action="/web/jobs/{{ job.id }}/delete" method="post" class="d-inline"
       onsubmit="return confirm('Excluir este job e TUDO relacionado (vídeo, fotos, clipes, eventos e relatórios)? Esta ação não pode ser desfeita.');">

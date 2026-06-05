@@ -10,7 +10,12 @@ def clip_time_range(
     duration_sec: float,
 ) -> tuple[float, float]:
     start = max(0.0, start_sec - padding_sec)
-    end = min(duration_sec, end_sec + padding_sec) if duration_sec > 0 else end_sec + padding_sec
+    if duration_sec > 0:
+        # Pequena folga evita seek no frame inexistente (ex.: 3600.0s em vídeo de 1 h).
+        end_cap = max(0.0, duration_sec - 0.05)
+        end = min(end_cap, end_sec + padding_sec)
+    else:
+        end = end_sec + padding_sec
     return start, end
 
 

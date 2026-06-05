@@ -236,6 +236,7 @@ Não é necessário GPU nem vídeos reais para a suíte de testes.
 | Erro ao importar módulo | Use `--app-dir src` e rode a partir da raiz do clone |
 | Pasta `data/` vazia após clone | Normal — dados são locais; reprocesse vídeos nesta máquina |
 | Lote não acha vídeos em subpastas | MP4 devem estar em `incoming/` **ou subpastas** (versão atual); rode uvicorn na **raiz** do projeto; veja logs `scan_folder` com `--log-level info` |
+| Job **Falhou** com `Frame não disponível em 3599.9s` | Evento no **fim do vídeo** (~1 h); atualize o código (clamp de seek) e reprocesse com `force=true` |
 | Modelo YOLO não baixa | Verifique internet no primeiro job; proxy/firewall pode bloquear download do Ultralytics |
 
 ---

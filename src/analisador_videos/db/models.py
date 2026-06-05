@@ -100,6 +100,7 @@ class Event(Base):
     start_time_sec: Mapped[float] = mapped_column(Float, nullable=False)
     end_time_sec: Mapped[float] = mapped_column(Float, nullable=False)
     start_time_raw_sec: Mapped[float] = mapped_column(Float, nullable=False)
+    end_time_raw_sec: Mapped[float | None] = mapped_column(Float, nullable=True)
     detection_time_sec: Mapped[float | None] = mapped_column(Float, nullable=True)
     merged_track_ids: Mapped[str] = mapped_column(Text, nullable=False)
     avg_confidence: Mapped[float] = mapped_column(Float, nullable=False)

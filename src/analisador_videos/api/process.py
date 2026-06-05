@@ -110,6 +110,7 @@ async def process_video(
     batch_id = batch.id if batch else None
 
     results = []
+    pending_async: list = []
     for path, filename in video_paths:
         sha = file_sha256(path)
         if not force:
@@ -143,9 +144,14 @@ async def process_video(
             run_sync(job.id)
             entry["status"] = "done"
         else:
-            await run_async(job.id)
+            pending_async.append(run_async(job.id))
             entry["status"] = "queued"
         results.append(entry)
+
+    if pending_async:
+        import asyncio
+
+        await asyncio.gather(*pending_async, return_exceptions=True)
 
     status_code = 200 if sync else 202
     from fastapi.responses import JSONResponse

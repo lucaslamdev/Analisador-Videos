@@ -32,6 +32,7 @@ def run_migrations() -> None:
     add_column("jobs", "frames_total", "frames_total INTEGER")
     add_column("events", "bbox_json", "bbox_json TEXT")
     add_column("events", "detection_time_sec", "detection_time_sec REAL")
+    add_column("events", "end_time_raw_sec", "end_time_raw_sec REAL")
     add_column("events", "interval_start_snapshot_path", "interval_start_snapshot_path TEXT")
     add_column("events", "interval_start_thumbnail_path", "interval_start_thumbnail_path TEXT")
     add_column("events", "interval_end_snapshot_path", "interval_end_snapshot_path TEXT")

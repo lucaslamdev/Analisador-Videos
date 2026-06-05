@@ -1,10 +1,23 @@
 {% extends "base.html" %}
-{% from "macros.html" import breadcrumb, page_header, status_badge, progress_bar, stage_badge, cancel_job_button, delete_job_button, job_export_buttons %}
+{% from "macros.html" import breadcrumb, page_header, status_badge, progress_bar, stage_badge, cancel_job_button, delete_job_button, retry_job_button, job_error_detail, job_export_buttons %}
 {% block title %}Job {{ job.id[:8] }}… — Analisador{% endblock %}
 {% block content %}
 {{ breadcrumb([("Início", "/"), ("Jobs", "/jobs"), (job.id[:8] ~ "…", None)]) }}
 
 {{ page_header("Job " ~ job.id[:8] ~ "…", video.filename if video else "Vídeo #" ~ job.video_id) }}
+
+{% if retry_error %}
+<div class="alert alert-danger" role="alert">{{ retry_error }}</div>
+{% endif %}
+
+{% if job.error_message %}
+<div class="card card-app mb-4 border-{{ 'warning' if job.status == 'done' else 'danger' }}">
+  <div class="card-header">
+    {% if job.status == 'done' %}Avisos do processamento{% else %}Erro do job{% endif %}
+  </div>
+  <div class="card-body">{{ job_error_detail(job) }}</div>
+</div>
+{% endif %}
 
 <div class="row g-4">
   <div class="col-lg-5">
@@ -37,6 +50,7 @@
           {% endif %}
           <a href="/jobs" class="btn btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Voltar</a>
           {{ cancel_job_button(job) }}
+          {{ retry_job_button(job) }}
           {{ delete_job_button(job) }}
         </div>
         {% if job.status == 'done' and job.analysis_version == 1 and not job_v2 %}

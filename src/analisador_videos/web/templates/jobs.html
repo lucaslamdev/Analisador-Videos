@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros.html" import page_header, status_badge, progress_bar, stage_badge, empty_state, cancel_job_button, delete_job_button, job_export_buttons %}
+{% from "macros.html" import page_header, status_badge, progress_bar, stage_badge, empty_state, cancel_job_button, delete_job_button, retry_job_button, job_error_detail, job_export_buttons %}
 {% block title %}Jobs — Analisador{% endblock %}
 {% block content %}
 {{ page_header("Jobs", "Acompanhe fila, progresso por frame e erros de processamento.") }}
@@ -10,7 +10,7 @@
     <thead>
       <tr>
         <th>Job</th><th>Vídeo</th><th>Lote</th><th>Status</th>
-        <th>Progresso</th><th>Frames</th><th>Etapa</th><th>Exportar</th><th>Ações</th>
+        <th>Progresso</th><th>Frames</th><th>Etapa</th><th>Erro / avisos</th><th>Exportar</th><th>Ações</th>
       </tr>
     </thead>
     <tbody>
@@ -36,11 +36,12 @@
           {% if job.frames_total %}{{ job.frames_done or 0 }}/{{ job.frames_total }}{% else %}—{% endif %}
         </td>
         <td>{{ stage_badge(job.stage) }}</td>
+        <td style="min-width:12rem;max-width:22rem">{{ job_error_detail(job, compact=true) }}</td>
         <td>{{ job_export_buttons(job) }}</td>
         <td class="text-nowrap">
           {{ cancel_job_button(job, compact=true) }}
+          {{ retry_job_button(job, compact=true) }}
           {{ delete_job_button(job, compact=true) }}
-          {% if job.error_message %}<span class="d-block small text-danger mt-1">{{ job.error_message }}</span>{% endif %}
         </td>
       </tr>
     {% endfor %}

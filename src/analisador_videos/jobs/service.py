@@ -1,6 +1,9 @@
 import asyncio
 import json
+import logging
 import uuid
+
+logger = logging.getLogger(__name__)
 
 from sqlalchemy.orm import Session
 
@@ -61,6 +64,9 @@ async def run_async(job_id: str) -> None:
         with database.SessionLocal() as db:
             if is_job_cancelled(db, job_id):
                 return
-        await asyncio.to_thread(process_video_job, job_id)
+        try:
+            await asyncio.to_thread(process_video_job, job_id)
+        except Exception:
+            logger.exception("Job %s terminou com exceção não tratada", job_id)
 
     await run_with_slot(_run)

@@ -1,4 +1,5 @@
 import json
+import logging
 import shutil
 from datetime import datetime
 from pathlib import Path
@@ -34,6 +35,29 @@ from analisador_videos.reports.builder import (
     write_json_report,
     write_pdf_report,
 )
+from analisador_videos.util.errors import format_job_error
+
+logger = logging.getLogger(__name__)
+
+
+def _assign_snapshot_pair(
+    video_path: Path,
+    time_sec: float,
+    snap_path: Path,
+    thumb_path: Path,
+    bbox: tuple[float, float, float, float] | None,
+    warnings: list[str],
+    *,
+    event_id: int,
+    label: str,
+) -> tuple[str | None, str | None]:
+    if capture_snapshot(video_path, time_sec, snap_path, bbox=bbox):
+        thumb = thumb_path.as_posix() if make_thumbnail(snap_path, thumb_path) else None
+        return snap_path.as_posix(), thumb
+    warnings.append(
+        f"Evento {event_id} ({label} @ {time_sec:.2f}s): frame indisponível, ignorado"
+    )
+    return None, None
 
 
 def process_video_job(job_id: str) -> None:
@@ -62,10 +86,20 @@ def process_video_job(job_id: str) -> None:
             job.status = "running"
             db.commit()
 
-            _run_pipeline(db, job, video, video_path, profile, cache_dir)
+            warnings = _run_pipeline(db, job, video, video_path, profile, cache_dir)
             video.status = "done"
             video.processed_at = datetime.utcnow()
-            update_job(db, job_id, status="done", progress_pct=100, stage="done")
+            note = "\n".join(warnings) if warnings else None
+            if note:
+                note = f"Avisos (processamento concluído):\n{note}"
+            update_job(
+                db,
+                job_id,
+                status="done",
+                progress_pct=100,
+                stage="done",
+                error_message=note,
+            )
             db.commit()
             clear_cancelled(job_id)
         except JobCancelledError:
@@ -100,30 +134,43 @@ def process_video_job(job_id: str) -> None:
 
                     cpu_cfg = Cfg(device="cpu")
                     profile = resolve_runtime(cpu_cfg)
-                    _run_pipeline(
+                    warnings = _run_pipeline(
                         db, job, video, video_path, profile, cache_dir, cfg=cpu_cfg
                     )
                     video.status = "done"
                     video.processed_at = datetime.utcnow()
+                    lines = [f"CUDA falhou, concluído em CPU: {exc}"]
+                    if warnings:
+                        lines.append("\n".join(warnings))
                     update_job(
                         db,
                         job_id,
                         status="done",
                         progress_pct=100,
                         stage="done",
-                        error_message=f"CUDA falhou, concluído em CPU: {exc}",
+                        error_message="\n".join(lines),
                     )
                     db.commit()
                 except Exception as exc2:
                     video.status = "failed"
-                    update_job(db, job_id, status="failed", error_message=str(exc2))
+                    update_job(
+                        db,
+                        job_id,
+                        status="failed",
+                        error_message=format_job_error(exc2),
+                    )
                     db.commit()
-                    raise
+                    logger.exception("Job %s falhou após fallback CPU", job_id)
             else:
                 video.status = "failed"
-                update_job(db, job_id, status="failed", error_message=str(exc))
+                update_job(
+                    db,
+                    job_id,
+                    status="failed",
+                    error_message=format_job_error(exc),
+                )
                 db.commit()
-                raise
+                logger.exception("Job %s falhou", job_id)
         finally:
             if cache_dir:
                 cleanup_frame_cache(cache_dir)
@@ -137,7 +184,7 @@ def _run_pipeline(
     profile,
     cache_dir: Path,
     cfg=None,
-) -> None:
+) -> list[str]:
     cfg = cfg or settings
     job_id = job.id
 
@@ -231,6 +278,7 @@ def _run_pipeline(
                 start_time_sec=clip_start,
                 end_time_sec=clip_end,
                 start_time_raw_sec=m.start_time_sec,
+                end_time_raw_sec=m.end_time_sec,
                 detection_time_sec=det_t,
                 merged_track_ids=json.dumps(m.merged_track_ids),
                 avg_confidence=m.avg_confidence,
@@ -249,6 +297,7 @@ def _run_pipeline(
     clip_dir = settings.data_dir / "clips"
     thumb_dir = settings.data_dir / "snapshots" / "thumbs"
     total_ev = max(len(events), 1)
+    media_warnings: list[str] = []
 
     for i, event in enumerate(events):
         ensure_not_cancelled(db, job_id)
@@ -263,20 +312,58 @@ def _run_pipeline(
         if event.bbox_json:
             bbox = tuple(json.loads(event.bbox_json))
         t_cap = event.detection_time_sec or event.start_time_raw_sec
-        capture_snapshot(video_path, t_cap, snap_path, bbox=bbox)
-        make_thumbnail(snap_path, thumb_path)
-        capture_snapshot(video_path, event.start_time_raw_sec, snap_start, bbox=bbox)
-        make_thumbnail(snap_start, thumb_start)
-        capture_snapshot(video_path, event.end_time_sec, snap_end, bbox=bbox)
-        make_thumbnail(snap_end, thumb_end)
-        extract_clip(video_path, event.start_time_sec, event.end_time_sec, clip_path)
-        event.snapshot_path = snap_path.as_posix()
-        event.thumbnail_path = thumb_path.as_posix()
-        event.interval_start_snapshot_path = snap_start.as_posix()
-        event.interval_start_thumbnail_path = thumb_start.as_posix()
-        event.interval_end_snapshot_path = snap_end.as_posix()
-        event.interval_end_thumbnail_path = thumb_end.as_posix()
-        event.clip_path = clip_path.as_posix()
+        sp, tp = _assign_snapshot_pair(
+            video_path,
+            t_cap,
+            snap_path,
+            thumb_path,
+            bbox,
+            media_warnings,
+            event_id=event.id,
+            label="detecção",
+        )
+        event.snapshot_path = sp
+        event.thumbnail_path = tp
+        ss, ts = _assign_snapshot_pair(
+            video_path,
+            event.start_time_raw_sec,
+            snap_start,
+            thumb_start,
+            bbox,
+            media_warnings,
+            event_id=event.id,
+            label="início",
+        )
+        event.interval_start_snapshot_path = ss
+        event.interval_start_thumbnail_path = ts
+        end_snap_t = (
+            event.end_time_raw_sec
+            if event.end_time_raw_sec is not None
+            else event.end_time_sec
+        )
+        se, te = _assign_snapshot_pair(
+            video_path,
+            end_snap_t,
+            snap_end,
+            thumb_end,
+            bbox,
+            media_warnings,
+            event_id=event.id,
+            label="fim",
+        )
+        event.interval_end_snapshot_path = se
+        event.interval_end_thumbnail_path = te
+        try:
+            extract_clip(
+                video_path, event.start_time_sec, event.end_time_sec, clip_path
+            )
+            event.clip_path = clip_path.as_posix()
+        except Exception as exc:
+            media_warnings.append(
+                f"Evento {event.id} (clipe {event.start_time_sec:.2f}s–"
+                f"{event.end_time_sec:.2f}s): {exc}"
+            )
+            logger.warning("Clipe ignorado evento %s: %s", event.id, exc)
         pct = 75 + int(((i + 1) / total_ev) * 20)
         update_job(db, job_id, stage="media", progress_pct=pct)
     db.commit()
@@ -284,20 +371,30 @@ def _run_pipeline(
     clip_paths = [Path(e.clip_path) for e in events if e.clip_path]
     if clip_paths:
         supercut_path = settings.data_dir / "supercuts" / f"video{video.id}_full.mp4"
-        build_supercut(clip_paths, supercut_path)
-        db.add(
-            Artifact(
-                video_id=video.id,
-                type="supercut_full",
-                class_filter=None,
-                path=str(supercut_path),
+        try:
+            build_supercut(clip_paths, supercut_path)
+            db.add(
+                Artifact(
+                    video_id=video.id,
+                    type="supercut_full",
+                    class_filter=None,
+                    path=str(supercut_path),
+                )
             )
-        )
-        db.commit()
+            db.commit()
+        except Exception as exc:
+            media_warnings.append(f"Supercut: {exc}")
+            logger.warning("Supercut ignorado vídeo %s: %s", video.id, exc)
 
     if cfg.generate_reports_on_complete:
         update_job(db, job_id, stage="reports", progress_pct=95)
-        _write_reports(db, job, video, events)
+        try:
+            _write_reports(db, job, video, events)
+        except Exception as exc:
+            media_warnings.append(f"Relatórios automáticos: {exc}")
+            logger.warning("Relatórios on-complete falharam: %s", exc)
+
+    return media_warnings
 
 
 def _write_reports(db, job: Job, video: Video, events: list[Event]) -> None:

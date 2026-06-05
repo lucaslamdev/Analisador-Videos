@@ -8,6 +8,8 @@ from analisador_videos.db.database import get_db
 from analisador_videos.db.models import Job
 from analisador_videos.jobs.cancel import cancel_job
 from analisador_videos.jobs.delete import delete_job
+from analisador_videos.jobs.retry import create_retry_job
+from analisador_videos.jobs.service import run_async
 from analisador_videos.jobs.sensitive_v2 import create_sensitive_bbox_v2_for_job, find_job_v2
 from analisador_videos.reports.job_exports import ensure_job_report, job_supercut_path
 from analisador_videos.util.media_response import video_file_response
@@ -20,6 +22,22 @@ _MEDIA = {
     "csv": "text/csv",
     "pdf": "application/pdf",
 }
+
+
+@router.post("/jobs/{job_id}/retry")
+async def retry_job_endpoint(job_id: str, db: Session = Depends(get_db)):
+    try:
+        new_job = create_retry_job(db, job_id)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    await run_async(new_job.id)
+    return {
+        "previous_job_id": job_id,
+        "job_id": new_job.id,
+        "video_id": new_job.video_id,
+        "status": "queued",
+        "message": "Reprocessamento enfileirado",
+    }
 
 
 @router.post("/jobs/{job_id}/cancel")
