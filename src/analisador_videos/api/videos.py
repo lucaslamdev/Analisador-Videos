@@ -23,6 +23,7 @@ from analisador_videos.reports.service import ensure_video_report
 from analisador_videos.reports.pdf_quality import (
     PDF_QUALITY_COMPACT,
     normalize_report_format,
+    pdf_report_filename,
 )
 from analisador_videos.util.media_response import video_file_response
 
@@ -101,19 +102,25 @@ def download_report_v2(
     video = db.get(Video, video_id)
     if not video:
         raise HTTPException(404, "Vídeo não encontrado")
-    job_v2 = db.scalars(
-        select(Job)
-        .where(Job.video_id == video_id, Job.analysis_version == 2)
-        .order_by(Job.created_at.desc())
-    ).first()
-    if not job_v2:
-        raise HTTPException(404, "Relatório v2 não encontrado; gere job v2 antes")
-    try:
-        path = ensure_video_report_v2(
-            db, video, job_v2, base_fmt, quality=quality
-        )
-    except ValueError as exc:
-        raise HTTPException(404, str(exc)) from exc
+    report_dir = settings.data_dir / "reports"
+    if base_fmt == "pdf":
+        path = report_dir / pdf_report_filename(video_id, quality, v2=True)
+    else:
+        path = report_dir / f"video{video_id}.v2.{base_fmt}"
+    if not path.is_file():
+        job_v2 = db.scalars(
+            select(Job)
+            .where(Job.video_id == video_id, Job.analysis_version == 2)
+            .order_by(Job.created_at.desc())
+        ).first()
+        if not job_v2:
+            raise HTTPException(404, "Relatório v2 não encontrado; gere job v2 antes")
+        try:
+            path = ensure_video_report_v2(
+                db, video, job_v2, base_fmt, quality=quality
+            )
+        except ValueError as exc:
+            raise HTTPException(404, str(exc)) from exc
     if base_fmt == "html":
         from fastapi.responses import HTMLResponse
 
