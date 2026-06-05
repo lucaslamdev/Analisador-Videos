@@ -31,6 +31,8 @@ def ensure_video_report_v2(
     report_dir.mkdir(parents=True, exist_ok=True)
     if fmt == "pdf":
         path = report_dir / pdf_report_filename(video.id, quality, v2=True)
+        if path.is_file():
+            return path
         events = list(
             db.scalars(
                 select(Event)
@@ -49,6 +51,10 @@ def ensure_video_report_v2(
             "bbox_mode": "sensitive",
         }
         write_pdf_report(path, video, events, params, db=db, quality=quality)
+        return path
+
+    path = report_dir / f"video{video.id}.v2.{fmt}"
+    if path.is_file():
         return path
 
     paths = write_video_reports_v2(db, video, job_v2)
