@@ -426,6 +426,7 @@ async def web_process_folder(db: Session = Depends(get_db)):
         )
     batch, slug = next_batch_slug(db)
     pending: list = []
+    seen_video_ids: set[int] = set()
     for p in paths:
         dest = copy_to_storage(p, settings.data_dir / "videos")
         sha = file_sha256(dest)
@@ -451,6 +452,9 @@ async def web_process_folder(db: Session = Depends(get_db)):
             db.add(video)
             db.commit()
             db.refresh(video)
+        if video.id in seen_video_ids:
+            continue
+        seen_video_ids.add(video.id)
         job = create_job(db, video.id, batch_id=batch.id)
         pending.append(run_async(job.id))
     if pending:

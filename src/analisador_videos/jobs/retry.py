@@ -2,6 +2,7 @@
 
 from pathlib import Path
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from analisador_videos.db.models import Job, Video
@@ -21,6 +22,16 @@ def create_retry_job(db: Session, job_id: str) -> Job:
         raise ValueError("Vídeo associado ao job não encontrado")
     if not video.path or not Path(video.path).is_file():
         raise ValueError(f"Arquivo de vídeo não encontrado: {video.path}")
+    active = db.scalar(
+        select(Job.id).where(
+            Job.video_id == video.id,
+            Job.status.in_(("queued", "running")),
+        )
+    )
+    if active:
+        raise ValueError(
+            "Já existe job na fila ou em execução para este vídeo"
+        )
 
     video.status = "pending"
     db.commit()

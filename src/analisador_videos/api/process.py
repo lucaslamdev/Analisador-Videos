@@ -111,6 +111,7 @@ async def process_video(
 
     results = []
     pending_async: list = []
+    seen_video_ids: set[int] = set()
     for path, filename in video_paths:
         sha = file_sha256(path)
         if not force:
@@ -132,6 +133,10 @@ async def process_video(
         if force and video.status == "done":
             video.status = "pending"
             db.commit()
+
+        if video.id in seen_video_ids:
+            continue
+        seen_video_ids.add(video.id)
 
         job = create_job(db, video.id, batch_id=batch_id)
         entry = {

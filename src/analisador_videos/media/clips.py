@@ -16,6 +16,8 @@ def clip_time_range(
         end = min(end_cap, end_sec + padding_sec)
     else:
         end = end_sec + padding_sec
+    if start > end:
+        start = end
     return start, end
 
 
