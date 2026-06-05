@@ -18,6 +18,9 @@ class Settings(BaseSettings):
     annotate_sensitive_vehicle_confidence: float = 0.18
     annotate_sensitive_iou: float = 0.4
     pdf_max_thumbnails: int = 20
+    pdf_compact_max_width: int = 480
+    pdf_compact_jpeg_quality: int = 45
+    pdf_compact_max_thumbnails: int = 0
     merge_spatial_ratio: float = 0.15
 
     yolo_model: str = "yolo11n.pt"

@@ -12,6 +12,7 @@ from analisador_videos.jobs.retry import create_retry_job
 from analisador_videos.jobs.service import run_async
 from analisador_videos.jobs.sensitive_v2 import create_sensitive_bbox_v2_for_job, find_job_v2
 from analisador_videos.reports.job_exports import ensure_job_report, job_supercut_path
+from analisador_videos.reports.pdf_quality import normalize_report_format
 from analisador_videos.util.media_response import video_file_response
 
 router = APIRouter(tags=["jobs"])
@@ -66,24 +67,35 @@ def delete_job_endpoint(job_id: str, db: Session = Depends(get_db)):
 
 
 @router.get("/jobs/{job_id}/reports/{format}")
-def job_report(job_id: str, format: str, db: Session = Depends(get_db)):
-    if format not in _MEDIA:
+def job_report(
+    job_id: str,
+    format: str,
+    compact: bool = Query(False, description="PDF com imagens comprimidas"),
+    db: Session = Depends(get_db),
+):
+    base_fmt, quality = normalize_report_format(format)
+    if compact and base_fmt == "pdf":
+        from analisador_videos.reports.pdf_quality import PDF_QUALITY_COMPACT
+
+        quality = PDF_QUALITY_COMPACT
+    if base_fmt not in _MEDIA:
         raise HTTPException(400, "Formato inválido")
     job = db.get(Job, job_id)
     if not job:
         raise HTTPException(404, "Job não encontrado")
     try:
-        path = ensure_job_report(db, job, format)
+        path = ensure_job_report(db, job, base_fmt, quality=quality)
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
-    if format == "html":
+    if base_fmt == "html":
         from fastapi.responses import HTMLResponse
 
         return HTMLResponse(path.read_text(encoding="utf-8"))
+    filename = path.name
     return FileResponse(
         path,
-        media_type=_MEDIA[format],
-        filename=f"job-{job_id[:8]}-{path.name}",
+        media_type=_MEDIA[base_fmt],
+        filename=filename,
     )
 
 

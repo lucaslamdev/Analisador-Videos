@@ -171,8 +171,13 @@ def event_interval_evidence_html(
 
 
 def append_pdf_interval_evidence(
-    story, styles, video: Video, event: Event, db=None
+    story, styles, video: Video, event: Event, db=None, *, quality: str = "standard"
 ) -> None:
+    from analisador_videos.reports.pdf_quality import (
+        pdf_image_display_size,
+        prepare_image_for_pdf,
+    )
+
     det = (
         event.detection_time_sec
         if event.detection_time_sec is not None
@@ -189,11 +194,17 @@ def append_pdf_interval_evidence(
     )
 
     cells: list = []
+    img_w, img_h = pdf_image_display_size(quality)
     for side, label in (("start", "Início"), ("end", "Fim")):
         snap = ensure_interval_snapshot(video, event, side, db=db)
         if snap and snap.is_file():
             t = _interval_time_sec(event, side)
-            img = Image(str(snap), width=7 * cm, height=5.25 * cm)
+            embed = prepare_image_for_pdf(
+                snap,
+                f"v{video.id}_e{event.id}_{side}",
+                quality,
+            )
+            img = Image(str(embed), width=img_w, height=img_h)
             cells.append(
                 [
                     Paragraph(

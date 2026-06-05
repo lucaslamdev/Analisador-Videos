@@ -42,7 +42,9 @@ def build_video_report_html(db: Session, video: Video) -> str:
 </body></html>"""
 
 
-def ensure_job_report(db: Session, job: Job, fmt: str) -> Path:
+def ensure_job_report(
+    db: Session, job: Job, fmt: str, *, quality: str = "standard"
+) -> Path:
     video = job_video(db, job)
     if not video:
         raise ValueError("Vídeo do job não encontrado")
@@ -51,7 +53,7 @@ def ensure_job_report(db: Session, job: Job, fmt: str) -> Path:
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_text(build_video_report_html(db, video), encoding="utf-8")
         return out
-    return ensure_video_report(db, video, fmt)
+    return ensure_video_report(db, video, fmt, quality=quality)
 
 
 def job_supercut_path(db: Session, job: Job) -> Path:

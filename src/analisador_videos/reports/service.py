@@ -12,6 +12,7 @@ from analisador_videos.reports.builder import (
     write_json_report,
     write_pdf_report,
 )
+from analisador_videos.reports.pdf_quality import pdf_report_filename
 
 
 def _latest_job_params(db: Session, video_id: int) -> dict:
@@ -23,7 +24,9 @@ def _latest_job_params(db: Session, video_id: int) -> dict:
     return {}
 
 
-def ensure_video_report(db: Session, video: Video, fmt: str) -> Path:
+def ensure_video_report(
+    db: Session, video: Video, fmt: str, *, quality: str = "standard"
+) -> Path:
     report_dir = settings.data_dir / "reports"
     report_dir.mkdir(parents=True, exist_ok=True)
     events = list(
@@ -46,14 +49,14 @@ def ensure_video_report(db: Session, video: Video, fmt: str) -> Path:
         write_csv_report(path, events)
         return path
     if fmt == "pdf":
-        path = report_dir / f"video{video.id}.pdf"
+        path = report_dir / pdf_report_filename(video.id, quality)
         write_pdf_report(
             path,
             video,
             events,
             params,
-            max_thumbnails=settings.pdf_max_thumbnails,
             db=db,
+            quality=quality,
         )
         return path
     raise ValueError(f"Formato inválido: {fmt}")

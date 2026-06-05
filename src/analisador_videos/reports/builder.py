@@ -138,15 +138,29 @@ def write_pdf_report(
     video: Video,
     events: list[Event],
     params: dict,
-    max_thumbnails: int = 20,
+    max_thumbnails: int | None = None,
     db=None,
+    *,
+    quality: str = "standard",
 ) -> None:
+    from analisador_videos.reports.pdf_quality import (
+        PDF_QUALITY_COMPACT,
+        pdf_max_events_for_quality,
+    )
+
     path.parent.mkdir(parents=True, exist_ok=True)
     styles = getSampleStyleSheet()
     doc = SimpleDocTemplate(str(path), pagesize=A4)
     story = []
 
     story.append(Paragraph("Relatório de Análise de Vídeo", styles["Title"]))
+    if quality == PDF_QUALITY_COMPACT:
+        story.append(
+            Paragraph(
+                "<i>Versão compacta — imagens reduzidas para download leve.</i>",
+                styles["Normal"],
+            )
+        )
     story.append(Spacer(1, 0.3 * cm))
     story.append(Paragraph(f"Arquivo: {video.filename}", styles["Normal"]))
     story.append(Paragraph(f"SHA-256: {video.sha256}", styles["Normal"]))
@@ -185,7 +199,12 @@ def write_pdf_report(
         )
     )
     story.append(Spacer(1, 0.2 * cm))
-    for e in events[:max_thumbnails]:
-        append_pdf_interval_evidence(story, styles, video, e, db=db)
+    thumb_limit = (
+        max_thumbnails
+        if max_thumbnails is not None
+        else pdf_max_events_for_quality(quality, len(events))
+    )
+    for e in events[:thumb_limit]:
+        append_pdf_interval_evidence(story, styles, video, e, db=db, quality=quality)
 
     doc.build(story)

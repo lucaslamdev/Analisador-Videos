@@ -16,6 +16,54 @@ from analisador_videos.reports.builder import (
 from analisador_videos.reports.service import _latest_job_params
 
 
+def ensure_video_report_v2(
+    db: Session,
+    video: Video,
+    job_v2: Job,
+    fmt: str,
+    *,
+    quality: str = "standard",
+) -> Path:
+    """Gera ou retorna relatório v2 (json/csv/pdf/html)."""
+    from analisador_videos.reports.pdf_quality import pdf_report_filename
+
+    report_dir = settings.data_dir / "reports"
+    report_dir.mkdir(parents=True, exist_ok=True)
+    if fmt == "pdf":
+        path = report_dir / pdf_report_filename(video.id, quality, v2=True)
+        if path.is_file():
+            return path
+        events = list(
+            db.scalars(
+                select(Event)
+                .where(Event.video_id == video.id)
+                .order_by(Event.start_time_sec)
+            )
+        )
+        artifacts = list(
+            db.scalars(select(Artifact).where(Artifact.video_id == video.id))
+        )
+        base = json.loads(job_v2.params_json) if job_v2.params_json else {}
+        params = {
+            **_latest_job_params(db, video.id),
+            **base,
+            "analysis_version": job_v2.analysis_version,
+            "bbox_mode": "sensitive",
+        }
+        write_pdf_report(path, video, events, params, db=db, quality=quality)
+        return path
+
+    path = report_dir / f"video{video.id}.v2.{fmt}"
+    if path.is_file():
+        return path
+
+    paths = write_video_reports_v2(db, video, job_v2)
+    path = paths.get(fmt)
+    if not path or not path.is_file():
+        raise ValueError(f"Relatório v2 {fmt} não disponível")
+    return path
+
+
 def write_video_reports_v2(db: Session, video: Video, job_v2: Job) -> dict[str, Path]:
     """Gera relatórios v2 (sufixo .v2) sem apagar os da versão 1."""
     report_dir = settings.data_dir / "reports"

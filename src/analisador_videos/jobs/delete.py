@@ -35,6 +35,11 @@ def _cleanup_video_report_files(video_id: int) -> None:
     report_dir = settings.data_dir / "reports"
     for ext in ("json", "csv", "pdf", "html"):
         _unlink_file(report_dir / f"video{video_id}.{ext}")
+    _unlink_file(report_dir / f"video{video_id}.compact.pdf")
+    for ext in ("json", "csv", "pdf", "html"):
+        _unlink_file(report_dir / f"video{video_id}.v2.{ext}")
+    _unlink_file(report_dir / f"video{video_id}.v2.compact.pdf")
+    _unlink_glob(report_dir / "pdf_compact_cache", f"v{video_id}_*")
 
 
 def _cleanup_video_media_files(video_id: int) -> None:
