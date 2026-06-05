@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros.html" import page_header, event_times, empty_state %}
+{% from "macros.html" import page_header, event_times, empty_state, delete_event_button %}
 {% block title %}Eventos — Analisador{% endblock %}
 {% block content %}
 {{ page_header("Galeria de eventos", "Selecione um ou mais lotes, vídeos e classes. Use Ctrl+clique ou Shift+clique nas listas.") }}
@@ -156,7 +156,10 @@
         <p class="small text-muted mb-2">Vídeo #{{ e.video_id }}</p>
         {% endif %}
         {{ event_times(e) }}
-        <a href="/events/{{ e.id }}" class="btn btn-sm btn-primary mt-3 stretched-link-btn">Ver detalhe</a>
+        <div class="d-flex flex-wrap gap-2 mt-3 position-relative" style="z-index:2">
+          <a href="/events/{{ e.id }}" class="btn btn-sm btn-primary">Ver detalhe</a>
+          {{ delete_event_button(e, compact=true) }}
+        </div>
       </div>
     </article>
   </div>

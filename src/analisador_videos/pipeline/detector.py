@@ -115,12 +115,15 @@ def run_detection(
     profile: ComputeProfile | None = None,
     frame_paths: list[Path] | None = None,
     on_progress: Callable[[int, int], None] | None = None,
+    allowed_classes: frozenset[str] | None = None,
 ) -> list[TrackSegment]:
     profile = profile or resolve_runtime(settings)
     if profile.backend == "cuda" and frame_paths is None:
-        return _run_detection_gpu_stream(video_path, settings, profile, on_progress)
+        return _run_detection_gpu_stream(
+            video_path, settings, profile, on_progress, allowed_classes
+        )
     return _run_detection_cpu_loop(
-        video_path, settings, profile, frame_paths, on_progress
+        video_path, settings, profile, frame_paths, on_progress, allowed_classes
     )
 
 
@@ -130,13 +133,19 @@ def _run_detection_cpu_loop(
     profile: ComputeProfile,
     frame_paths: list[Path] | None,
     on_progress: Callable[[int, int], None] | None,
+    allowed_classes: frozenset[str] | None = None,
 ) -> list[TrackSegment]:
     import cv2
     from ultralytics import YOLO
 
     if frame_paths:
         return _run_detection_on_images(
-            frame_paths, settings, profile, on_progress, fps_hint=settings.sample_fps
+            frame_paths,
+            settings,
+            profile,
+            on_progress,
+            fps_hint=settings.sample_fps,
+            allowed_classes=allowed_classes,
         )
 
     cap = cv2.VideoCapture(str(video_path))
@@ -174,6 +183,7 @@ def _run_detection_cpu_loop(
                 frame_idx / fps if fps > 0 else 0.0,
                 settings,
                 class_names,
+                allowed_classes,
             )
             done += 1
             if on_progress and (
@@ -192,6 +202,7 @@ def _run_detection_gpu_stream(
     settings: Settings,
     profile: ComputeProfile,
     on_progress: Callable[[int, int], None] | None,
+    allowed_classes: frozenset[str] | None = None,
 ) -> list[TrackSegment]:
     import cv2
     from ultralytics import YOLO
@@ -227,7 +238,9 @@ def _run_detection_gpu_stream(
         if hasattr(result, "frame") and result.frame is not None:
             frame_idx = int(result.frame)
         t_sec = frame_idx / fps if fps > 0 else float(done)
-        _process_frame_result(result, accum, t_sec, settings, class_names)
+        _process_frame_result(
+            result, accum, t_sec, settings, class_names, allowed_classes
+        )
         done += 1
         if on_progress and (
             done % settings.progress_update_every_n_frames == 0 or done >= total_work
@@ -245,6 +258,7 @@ def _run_detection_on_images(
     profile: ComputeProfile,
     on_progress: Callable[[int, int], None] | None,
     fps_hint: float,
+    allowed_classes: frozenset[str] | None = None,
 ) -> list[TrackSegment]:
     import cv2
     from ultralytics import YOLO
@@ -273,6 +287,7 @@ def _run_detection_on_images(
             t_sec,
             settings,
             class_names,
+            allowed_classes,
         )
         if on_progress and (
             (i + 1) % settings.progress_update_every_n_frames == 0
@@ -289,6 +304,7 @@ def _process_frame_result(
     t_sec: float,
     settings: Settings,
     class_names: dict[int, str],
+    allowed_classes: frozenset[str] | None = None,
 ) -> None:
     if not results or results[0].boxes is None or results[0].boxes.id is None:
         return
@@ -297,6 +313,8 @@ def _process_frame_result(
         cls_id = int(boxes.cls[i].item())
         class_name = _class_name_from_id(cls_id, class_names)
         if class_name is None:
+            continue
+        if allowed_classes is not None and class_name not in allowed_classes:
             continue
         conf = float(boxes.conf[i].item())
         if conf < _conf_threshold(settings, class_name):

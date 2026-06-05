@@ -17,6 +17,7 @@ from analisador_videos.jobs.cancel import (
     is_job_cancelled,
 )
 from analisador_videos.jobs.detection_params import detection_settings_for_job
+from analisador_videos.util.detection_classes import parse_detection_classes
 from analisador_videos.jobs.progress import update_job
 from analisador_videos.media.clips import clip_time_range, extract_clip
 from analisador_videos.media.frame_cache import (
@@ -227,12 +228,14 @@ def _run_pipeline(
         )
 
     update_job(db, job_id, stage="detect", progress_pct=10)
+    allowed_classes = parse_detection_classes(job.params_json)
     segments = run_detection(
         video_path,
         cfg,
         profile=profile,
         frame_paths=frame_paths,
         on_progress=on_detect_progress,
+        allowed_classes=allowed_classes,
     )
 
     db.query(Track).filter(Track.video_id == video.id).delete()

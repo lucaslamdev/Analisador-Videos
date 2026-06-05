@@ -3,12 +3,14 @@
 import json
 
 from analisador_videos.config import Settings, settings
+from analisador_videos.util.detection_classes import classes_for_storage
 
 
 def build_detection_params_json(
     base_params: dict | None = None,
     *,
     sensitive: bool = False,
+    detection_classes: list[str] | None = None,
 ) -> str:
     params = dict(base_params or {})
     params.update(
@@ -27,6 +29,12 @@ def build_detection_params_json(
         params.setdefault("detection_mode", "standard")
         params.setdefault("confidence_threshold", settings.confidence_threshold)
         params.setdefault("vehicle_confidence", settings.vehicle_confidence)
+    if detection_classes is not None:
+        stored = classes_for_storage(detection_classes)
+        if stored is not None:
+            params["detection_classes"] = stored
+        else:
+            params.pop("detection_classes", None)
     return json.dumps(params, ensure_ascii=False)
 
 

@@ -54,12 +54,20 @@ async def reprocess_job_endpoint(
     job_id: str,
     sensitive: bool = Query(False, description="Detecção com limiares mais baixos"),
     keep_batch: bool = Query(True, description="Manter vídeo no lote original"),
+    detection_class: list[str] = Query(
+        default=[], alias="class", description="Classes YOLO a detectar (vazio = todas)"
+    ),
     db: Session = Depends(get_db),
 ):
     """Reprocessar um único job (done/failed/cancelled), fora do fluxo do lote inteiro."""
+    classes = detection_class or None
     try:
         new_job = create_reprocess_job(
-            db, job_id, sensitive=sensitive, keep_batch=keep_batch
+            db,
+            job_id,
+            sensitive=sensitive,
+            keep_batch=keep_batch,
+            detection_classes=classes,
         )
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc

@@ -39,7 +39,14 @@ from analisador_videos.pipeline.runner import build_supercut_for_video
 from analisador_videos.reports.batch_builder import build_batch_html
 from analisador_videos.web.event_filters import apply_event_filters, count_active_filters
 from analisador_videos.pipeline.compute import health_info
+from analisador_videos.events.delete import delete_event
+from analisador_videos.jobs.detection_params import build_detection_params_json
 from analisador_videos.util.class_labels import class_label_pt
+from analisador_videos.util.detection_classes import (
+    ALL_DETECTION_CLASSES,
+    normalize_form_classes,
+    selected_classes_for_ui,
+)
 from analisador_videos.util.time_format import format_hms
 from analisador_videos.util.ui_labels import (
     stage_label_pt,
@@ -86,6 +93,13 @@ def _count_active_batch_jobs(db: Session, batch_id: int) -> int:
     )
 
 
+def _class_picker_context(params_json: str | None = None) -> dict:
+    return {
+        "all_detection_classes": ALL_DETECTION_CLASSES,
+        "selected_detection_classes": selected_classes_for_ui(params_json),
+    }
+
+
 def _batch_map(db: Session, jobs: list[Job]) -> dict[int, Batch]:
     ids = {j.batch_id for j in jobs if j.batch_id}
     if not ids:
@@ -101,6 +115,7 @@ def index(request: Request, db: Session = Depends(get_db)):
     videos = db.scalars(select(Video).order_by(Video.id.desc()).limit(10)).all()
     lotes = db.scalars(select(Batch).order_by(Batch.created_at.desc()).limit(5)).all()
     folder_error = request.query_params.get("folder_error")
+    retry_error = request.query_params.get("retry_error")
     folder_path = request.query_params.get("folder") or str(
         settings.videos_input_dir.resolve()
     )
@@ -115,7 +130,9 @@ def index(request: Request, db: Session = Depends(get_db)):
                 "batches": batches,
                 "lotes": lotes,
                 "folder_error": folder_error,
+                "retry_error": retry_error,
                 "folder_path": folder_path,
+                **_class_picker_context(),
             }
         ),
     )
@@ -175,6 +192,7 @@ def job_detail_page(job_id: str, request: Request, db: Session = Depends(get_db)
                 "video_supercuts": video_supercuts,
                 "retry_error": retry_error,
                 "event_count": event_count,
+                **_class_picker_context(job.params_json),
             }
         ),
     )
@@ -345,13 +363,28 @@ async def web_reprocess_job(
     background_tasks: BackgroundTasks,
     sensitive: str | None = Form(None),
     keep_batch: str | None = Form("1"),
+    detection_classes: list[str] = Form(default=[]),
+    use_class_picker: str | None = Form(None),
     db: Session = Depends(get_db),
 ):
     is_sensitive = sensitive in ("1", "true", "on")
     keep = keep_batch not in ("0", "false", "off")
+    classes_override = None
+    if use_class_picker in ("1", "true", "on"):
+        try:
+            classes_override = normalize_form_classes(detection_classes)
+        except ValueError as exc:
+            return RedirectResponse(
+                f"/jobs/{job_id}?retry_error={quote(str(exc))}",
+                status_code=303,
+            )
     try:
         new_job = create_reprocess_job(
-            db, job_id, sensitive=is_sensitive, keep_batch=keep
+            db,
+            job_id,
+            sensitive=is_sensitive,
+            keep_batch=keep,
+            detection_classes=classes_override,
         )
     except ValueError as exc:
         return RedirectResponse(
@@ -414,8 +447,16 @@ def lote_report_html(slug: str, db: Session = Depends(get_db)):
 @router.post("/web/upload")
 async def web_upload(
     file: UploadFile = File(...),
+    detection_classes: list[str] = Form(default=[]),
     db: Session = Depends(get_db),
 ):
+    try:
+        classes = normalize_form_classes(detection_classes)
+    except ValueError as exc:
+        return RedirectResponse(
+            f"/?retry_error={quote(str(exc))}",
+            status_code=303,
+        )
     content = await file.read()
     dest = save_upload(
         file.filename or "upload.mp4",
@@ -443,7 +484,8 @@ async def web_upload(
         db.add(video)
         db.commit()
         db.refresh(video)
-    job = create_job(db, video.id)
+    params_json = build_detection_params_json(detection_classes=classes)
+    job = create_job(db, video.id, params_json=params_json)
     await run_async(job.id)
     return RedirectResponse("/jobs", status_code=303)
 
@@ -451,8 +493,17 @@ async def web_upload(
 @router.post("/web/process-folder")
 async def web_process_folder(
     background_tasks: BackgroundTasks,
+    detection_classes: list[str] = Form(default=[]),
     db: Session = Depends(get_db),
 ):
+    try:
+        classes = normalize_form_classes(detection_classes)
+    except ValueError as exc:
+        return RedirectResponse(
+            f"/?retry_error={quote(str(exc))}",
+            status_code=303,
+        )
+    params_json = build_detection_params_json(detection_classes=classes)
     input_dir = settings.videos_input_dir.resolve()
     paths = scan_folder(settings.videos_input_dir)
     if not paths:
@@ -486,9 +537,28 @@ async def web_process_folder(
             db.add(video)
             db.commit()
             db.refresh(video)
-        job = create_job(db, video.id, batch_id=batch.id)
+        job = create_job(
+            db, video.id, batch_id=batch.id, params_json=params_json
+        )
         background_tasks.add_task(run_async, job.id)
     return RedirectResponse(f"/lotes/{slug}", status_code=303)
+
+
+@router.post("/web/events/{event_id}/delete")
+def web_delete_event(
+    event_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    event = db.get(Event, event_id)
+    video_id = event.video_id if event else None
+    delete_event(db, event_id)
+    referer = request.headers.get("referer")
+    if referer and referer.startswith("http"):
+        return RedirectResponse(referer, status_code=303)
+    if video_id:
+        return RedirectResponse(f"/events?video_id={video_id}", status_code=303)
+    return RedirectResponse("/events", status_code=303)
 
 
 @router.post("/web/supercut/{video_id}")

@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros.html" import breadcrumb, page_header, event_times, video_block %}
+{% from "macros.html" import breadcrumb, page_header, event_times, video_block, delete_event_button %}
 {% block title %}Evento #{{ event.id }} — Analisador{% endblock %}
 {% block content %}
 {{ breadcrumb([("Início", "/"), ("Eventos", "/events"), ("#" ~ event.id, None)]) }}
@@ -24,9 +24,12 @@
         <li><span class="meta-label">Confiança média</span><span class="meta-value">{{ "%.0f"|format(event.avg_confidence * 100) }}%</span></li>
         <li><span class="meta-label">Tracks</span><span class="meta-value"><code class="small">{{ event.merged_track_ids }}</code></span></li>
       </ul>
-      <a href="/events?video_id={{ event.video_id }}" class="btn btn-outline-secondary mt-3">
-        <i class="bi bi-arrow-left me-1"></i>Voltar à galeria
-      </a>
+      <div class="d-flex flex-wrap gap-2 mt-3">
+        <a href="/events?video_id={{ event.video_id }}" class="btn btn-outline-secondary">
+          <i class="bi bi-arrow-left me-1"></i>Voltar à galeria
+        </a>
+        {{ delete_event_button(event) }}
+      </div>
     </div>
   </div>
 

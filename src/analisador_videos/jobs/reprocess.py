@@ -32,6 +32,7 @@ def create_reprocess_job(
     *,
     sensitive: bool = False,
     keep_batch: bool = True,
+    detection_classes: list[str] | None = None,
 ) -> Job:
     """
     Cria novo job para o mesmo vídeo, sem reprocessar o lote inteiro.
@@ -71,7 +72,11 @@ def create_reprocess_job(
     _cleanup_video_media_files(video.id)
     _cleanup_video_report_files(video.id)
 
-    params_json = build_detection_params_json(base_params, sensitive=sensitive)
+    params_json = build_detection_params_json(
+        base_params,
+        sensitive=sensitive,
+        detection_classes=detection_classes,
+    )
     params = json.loads(params_json)
     params["reprocess_of"] = parent.id
     params_json = json.dumps(params, ensure_ascii=False)

@@ -9,6 +9,7 @@ from analisador_videos.db.models import Event
 from analisador_videos.util.media_response import video_file_response
 from analisador_videos.ingest.batch_service import get_batch_by_slug
 from analisador_videos.media.annotate_options import AnnotateOptions
+from analisador_videos.events.delete import delete_event
 from analisador_videos.pipeline.annotate_media import annotate_event_clip
 from analisador_videos.util.class_labels import class_label_pt
 from analisador_videos.web.event_filters import apply_event_filters
@@ -68,6 +69,13 @@ def list_events(
             "class": class_name,
         },
     }
+
+
+@router.delete("/events/{event_id}")
+def delete_event_endpoint(event_id: int, db: Session = Depends(get_db)):
+    if not delete_event(db, event_id):
+        raise HTTPException(404, "Evento não encontrado")
+    return {"event_id": event_id, "deleted": True}
 
 
 @router.get("/events/{event_id}")

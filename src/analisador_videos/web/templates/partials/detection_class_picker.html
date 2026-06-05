@@ -1,0 +1,22 @@
+{# Requer: all_detection_classes, selected_detection_classes (set) #}
+<div class="detection-class-picker mb-3" data-detection-class-picker>
+  <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+    <label class="form-label mb-0 small fw-semibold">Classes a detectar</label>
+    <div class="btn-group btn-group-sm">
+      <button type="button" class="btn btn-outline-secondary btn-sm" data-class-pick-all>Todas</button>
+      <button type="button" class="btn btn-outline-secondary btn-sm" data-class-pick-none>Nenhuma</button>
+    </div>
+  </div>
+  <p class="text-muted small mb-2">Desmarque classes que não precisa (ex.: pássaro, banco).</p>
+  <div class="row row-cols-2 row-cols-md-3 row-cols-lg-4 g-1 detection-class-grid">
+    {% for cls in all_detection_classes %}
+    <div class="col">
+      <div class="form-check form-check-sm">
+        <input class="form-check-input" type="checkbox" name="detection_classes" value="{{ cls }}" id="cls-{{ picker_id }}-{{ loop.index }}"
+               {% if cls in selected_detection_classes %}checked{% endif %}>
+        <label class="form-check-label small" for="cls-{{ picker_id }}-{{ loop.index }}">{{ cls | class_pt }}</label>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>

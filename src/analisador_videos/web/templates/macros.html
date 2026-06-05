@@ -104,6 +104,15 @@
 {% endif %}
 {% endmacro %}
 
+{% macro delete_event_button(event, compact=false) %}
+<form action="/web/events/{{ event.id }}/delete" method="post" class="d-inline"
+      onsubmit="return confirm('Excluir esta detecção e os arquivos associados (foto, clipe)?');">
+  <button type="submit" class="btn btn-sm btn-outline-danger" title="Excluir detecção">
+    <i class="bi bi-trash{% if not compact %} me-1{% endif %}" aria-hidden="true"></i>{% if not compact %}Excluir{% endif %}
+  </button>
+</form>
+{% endmacro %}
+
 {% macro delete_job_button(job, compact=false) %}
 <form action="/web/jobs/{{ job.id }}/delete" method="post" class="d-inline"
       onsubmit="return confirm('Excluir este job e TUDO relacionado (vídeo, fotos, clipes, eventos e relatórios)? Esta ação não pode ser desfeita.');">

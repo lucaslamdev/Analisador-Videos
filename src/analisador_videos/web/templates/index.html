@@ -4,6 +4,10 @@
 {% block content %}
 {{ page_header("Processar vídeos", "Envie MP4, processe a pasta incoming/ ou acompanhe jobs em andamento.") }}
 
+{% if retry_error %}
+<div class="alert alert-danger" role="alert">{{ retry_error }}</div>
+{% endif %}
+
 {% if folder_error == "empty" %}
 <div class="alert alert-warning" role="alert">
   <strong>Nenhum MP4 encontrado</strong> em <code>{{ folder_path }}</code>.
@@ -39,6 +43,8 @@
             <label for="file-upload" class="form-label mb-2">Selecione um vídeo MP4</label>
             <input id="file-upload" class="form-control" type="file" name="file" accept=".mp4" required>
           </div>
+          {% set picker_id = "upload" %}
+          {% include "partials/detection_class_picker.html" %}
           <button class="btn btn-primary w-100" type="submit">
             <i class="bi bi-play-circle me-1"></i>Enviar e processar
           </button>
@@ -54,6 +60,8 @@
         <p class="text-muted">Coloque MP4 em <code>incoming/</code> ou em subpastas. Um lote do dia é criado automaticamente.</p>
         <p class="text-muted small mb-0">Pasta lida: <code>{{ folder_path|default("incoming") }}</code></p>
         <form action="/web/process-folder" method="post" class="mt-auto">
+          {% set picker_id = "folder" %}
+          {% include "partials/detection_class_picker.html" %}
           <button class="btn btn-outline-secondary w-100" type="submit">
             <i class="bi bi-collection-play me-1"></i>Processar pasta (lote)
           </button>
@@ -128,4 +136,8 @@
   {{ empty_state("Nenhum vídeo", "O primeiro processamento aparecerá aqui.", "film") }}
   {% endif %}
 </section>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/detection-classes.js"></script>
 {% endblock %}

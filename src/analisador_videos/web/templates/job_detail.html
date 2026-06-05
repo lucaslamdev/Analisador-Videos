@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros.html" import breadcrumb, page_header, status_badge, progress_bar, stage_badge, cancel_job_button, delete_job_button, reprocess_job_buttons, job_error_detail, job_export_buttons %}
+{% from "macros.html" import breadcrumb, page_header, status_badge, progress_bar, stage_badge, cancel_job_button, delete_job_button, job_error_detail, job_export_buttons %}
 {% block title %}Job {{ job.id[:8] }}… — Analisador{% endblock %}
 {% block content %}
 {{ breadcrumb([("Início", "/"), ("Jobs", "/jobs"), (job.id[:8] ~ "…", None)]) }}
@@ -50,9 +50,29 @@
           {% endif %}
           <a href="/jobs" class="btn btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Voltar</a>
           {{ cancel_job_button(job) }}
-          {{ reprocess_job_buttons(job) }}
           {{ delete_job_button(job) }}
         </div>
+        {% if job.status in ('done', 'failed', 'cancelled') %}
+        <div class="border rounded p-3 mb-3 bg-light-subtle">
+          <p class="small fw-semibold mb-2"><i class="bi bi-sliders me-1"></i>Reprocessar este vídeo</p>
+          <form action="/web/jobs/{{ job.id }}/reprocess" method="post">
+            <input type="hidden" name="use_class_picker" value="1">
+            <input type="hidden" name="keep_batch" value="1">
+            {% set picker_id = "reprocess" %}
+            {% include "partials/detection_class_picker.html" %}
+            <div class="d-flex flex-wrap gap-2">
+              <button type="submit" name="sensitive" value="0" class="btn btn-sm btn-outline-primary"
+                      onclick="return confirm('Reprocessar com detecção padrão? Mídia e eventos anteriores serão substituídos.');">
+                <i class="bi bi-arrow-clockwise me-1"></i>Reprocessar
+              </button>
+              <button type="submit" name="sensitive" value="1" class="btn btn-sm btn-outline-warning"
+                      onclick="return confirm('Reprocessar com detecção sensível? Pode gerar mais falsos positivos.');">
+                <i class="bi bi-eye me-1"></i>Reprocessar sensível
+              </button>
+            </div>
+          </form>
+        </div>
+        {% endif %}
         {% if job.status == 'done' and event_count == 0 %}
         <div class="alert alert-info py-2 small mb-3">
           <i class="bi bi-info-circle me-1"></i>Nenhum evento detectado. Tente <strong>Reprocessar sensível</strong> se esperava detecções.
@@ -93,6 +113,7 @@
 {% endblock %}
 
 {% block scripts %}
+<script src="/static/detection-classes.js"></script>
 {% if job.status in ('queued', 'running') %}
 <script>
   setTimeout(function () { window.location.reload(); }, 5000);

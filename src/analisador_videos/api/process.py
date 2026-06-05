@@ -17,6 +17,7 @@ from analisador_videos.ingest.service import (
 )
 from analisador_videos.db.models import Batch
 from analisador_videos.ingest.batch_service import next_batch_slug
+from analisador_videos.jobs.detection_params import build_detection_params_json
 from analisador_videos.jobs.service import create_job, run_async, run_sync
 
 router = APIRouter(tags=["process"])
@@ -26,6 +27,8 @@ class FolderProcessRequest(BaseModel):
     source: str | None = None
     paths: list[str] | None = None
     batch_slug: str | None = None
+    detection_classes: list[str] | None = None
+    sensitive: bool = False
 
 
 def _resolve_batch(
@@ -133,7 +136,13 @@ async def process_video(
             video.status = "pending"
             db.commit()
 
-        job = create_job(db, video.id, batch_id=batch_id)
+        params_json = None
+        if body and (body.detection_classes is not None or body.sensitive):
+            params_json = build_detection_params_json(
+                sensitive=body.sensitive,
+                detection_classes=body.detection_classes,
+            )
+        job = create_job(db, video.id, batch_id=batch_id, params_json=params_json)
         entry = {
             "video_id": video.id,
             "job_id": job.id,
