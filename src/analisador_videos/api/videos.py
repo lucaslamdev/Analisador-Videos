@@ -17,9 +17,13 @@ from analisador_videos.pipeline.annotate_media import (
     get_supercut_path,
     list_supercuts_for_video,
 )
-from analisador_videos.reports.v2_reports import write_video_reports_v2
+from analisador_videos.reports.v2_reports import ensure_video_report_v2
 from analisador_videos.pipeline.runner import build_supercut_for_video
 from analisador_videos.reports.service import ensure_video_report
+from analisador_videos.reports.pdf_quality import (
+    PDF_QUALITY_COMPACT,
+    normalize_report_format,
+)
 from analisador_videos.util.media_response import video_file_response
 
 router = APIRouter(tags=["videos"])
@@ -83,31 +87,39 @@ def annotate_supercut_api(
 
 
 @router.get("/videos/{video_id}/reports/v2/{format}")
-def download_report_v2(video_id: int, format: str, db: Session = Depends(get_db)):
-    if format not in ("json", "csv", "pdf", "html"):
+def download_report_v2(
+    video_id: int,
+    format: str,
+    compact: bool = Query(False, description="PDF com imagens comprimidas"),
+    db: Session = Depends(get_db),
+):
+    base_fmt, quality = normalize_report_format(format)
+    if compact and base_fmt == "pdf":
+        quality = PDF_QUALITY_COMPACT
+    if base_fmt not in ("json", "csv", "pdf", "html"):
         raise HTTPException(400, "Formato inválido")
     video = db.get(Video, video_id)
     if not video:
         raise HTTPException(404, "Vídeo não encontrado")
-    path = settings.data_dir / "reports" / f"video{video_id}.v2.{format}"
-    if not path.is_file():
-        job_v2 = db.scalars(
-            select(Job)
-            .where(Job.video_id == video_id, Job.analysis_version == 2)
-            .order_by(Job.created_at.desc())
-        ).first()
-        if not job_v2:
-            raise HTTPException(404, "Relatório v2 não encontrado; gere job v2 antes")
-        paths = write_video_reports_v2(db, video, job_v2)
-        path = paths.get(format, path)
-    if not path.is_file():
-        raise HTTPException(404, "Relatório v2 não encontrado")
-    if format == "html":
+    job_v2 = db.scalars(
+        select(Job)
+        .where(Job.video_id == video_id, Job.analysis_version == 2)
+        .order_by(Job.created_at.desc())
+    ).first()
+    if not job_v2:
+        raise HTTPException(404, "Relatório v2 não encontrado; gere job v2 antes")
+    try:
+        path = ensure_video_report_v2(
+            db, video, job_v2, base_fmt, quality=quality
+        )
+    except ValueError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    if base_fmt == "html":
         from fastapi.responses import HTMLResponse
 
         return HTMLResponse(path.read_text(encoding="utf-8"))
     media = {"json": "application/json", "csv": "text/csv", "pdf": "application/pdf"}
-    return FileResponse(path, media_type=media[format], filename=path.name)
+    return FileResponse(path, media_type=media[base_fmt], filename=path.name)
 
 
 @router.get("/videos/{video_id}/supercuts")
@@ -185,18 +197,26 @@ def list_reports(video_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/videos/{video_id}/reports/{format}")
-def download_report(video_id: int, format: str, db: Session = Depends(get_db)):
+def download_report(
+    video_id: int,
+    format: str,
+    compact: bool = Query(False, description="PDF com imagens comprimidas"),
+    db: Session = Depends(get_db),
+):
+    base_fmt, quality = normalize_report_format(format)
+    if compact and base_fmt == "pdf":
+        quality = PDF_QUALITY_COMPACT
     type_map = {
         "json": "report_json",
         "csv": "report_csv",
         "pdf": "report_pdf",
     }
-    if format not in type_map:
+    if base_fmt not in type_map:
         raise HTTPException(400, "Formato inválido")
     video = db.get(Video, video_id)
     if not video:
         raise HTTPException(404, "Vídeo não encontrado")
-    path = ensure_video_report(db, video, format)
+    path = ensure_video_report(db, video, base_fmt, quality=quality)
     media = {
         "json": "application/json",
         "csv": "text/csv",
@@ -204,6 +224,6 @@ def download_report(video_id: int, format: str, db: Session = Depends(get_db)):
     }
     return FileResponse(
         path,
-        media_type=media[format],
+        media_type=media[base_fmt],
         filename=path.name,
     )
