@@ -42,9 +42,9 @@
           </li>
         </ul>
         {% if health %}
-        <span class="health-pill d-none d-md-inline" title="Backend de inferência">
-          {{ health.backend | upper }}{% if health.device_name %} · {{ health.device_name }}{% endif %}
-        </span>
+        <div class="health-pill-wrap ms-lg-2 mt-2 mt-lg-0">
+          {% include "partials/health_pill.html" %}
+        </div>
         {% endif %}
       </div>
     </div>
@@ -58,7 +58,10 @@
       <a href="/health" class="small" target="_blank" rel="noopener">Status do sistema</a>
     </div>
   </footer>
+  {% include "partials/confirm_modal.html" %}
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="/static/confirm-actions.js"></script>
+  <script src="/static/detection-classes.js"></script>
   {% block scripts %}{% endblock %}
 </body>
 </html>

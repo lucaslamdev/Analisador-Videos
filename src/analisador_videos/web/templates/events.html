@@ -1,8 +1,10 @@
 {% extends "base.html" %}
-{% from "macros.html" import page_header, event_times, empty_state, delete_event_button %}
+{% from "macros.html" import page_header, event_times, empty_state, delete_event_button, flash_alert %}
 {% block title %}Eventos — Analisador{% endblock %}
 {% block content %}
 {{ page_header("Galeria de eventos", "Revise os trechos encontrados e filtre por lote, vídeo ou classe.") }}
+
+{{ flash_alert(flash_ok, flash_level) }}
 
 <form class="filters-bar" method="get" role="search" aria-label="Filtros de eventos" id="events-filter-form">
   <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
@@ -119,7 +121,9 @@
     </form>
     {% if parent_job_id %}
     <form class="d-inline" action="/web/jobs/{{ parent_job_id }}/sensitive-v2" method="post"
-          onsubmit="return confirm('Criar uma versão sensível com caixas de detecção em todos os clipes e relatórios? A versão padrão permanece.');">
+          data-confirm-title="Versão sensível"
+          data-confirm="Criar versão sensível com caixas de detecção em todos os clipes e relatórios? A versão padrão permanece."
+          data-confirm-variant="warning">
       <button class="btn btn-sm btn-primary" type="submit">Versão sensível</button>
     </form>
     {% endif %}

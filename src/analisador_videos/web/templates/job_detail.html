@@ -1,10 +1,12 @@
 {% extends "base.html" %}
-{% from "macros.html" import breadcrumb, page_header, status_badge, progress_bar, stage_badge, artifact_badge, cancel_job_button, delete_job_button, job_error_detail, job_export_buttons %}
+{% from "macros.html" import breadcrumb, page_header, status_badge, progress_bar, stage_badge, artifact_badge, cancel_job_button, delete_job_button, job_error_detail, job_export_buttons, flash_alert %}
 {% block title %}Processamento {{ job.id[:8] }}… — Analisador{% endblock %}
 {% block content %}
 {{ breadcrumb([("Início", "/"), ("Processamentos", "/jobs"), (job.id[:8] ~ "…", None)]) }}
 
 {{ page_header("Processamento " ~ job.id[:8] ~ "…", video.filename if video else "Vídeo #" ~ job.video_id) }}
+
+{{ flash_alert(flash_ok, flash_level) }}
 
 {% if retry_error %}
 <div class="alert alert-danger" role="alert">{{ retry_error }}</div>
@@ -119,6 +121,7 @@
             <input type="hidden" name="use_class_picker" value="1">
             {% set picker_id = "reprocess" %}
             {% include "partials/detection_thresholds.html" %}
+            {% include "partials/pipeline_params.html" %}
             {% include "partials/detection_class_picker.html" %}
             <div class="form-check form-check-sm mb-2">
               <input class="form-check-input" type="checkbox" name="keep_batch" value="0" id="keep-batch-off">
@@ -128,11 +131,15 @@
             </div>
             <div class="d-flex flex-wrap gap-2">
               <button type="submit" name="sensitive" value="0" class="btn btn-sm btn-outline-primary"
-                      onclick="return confirm('Reprocessar com detecção padrão? Mídia e eventos anteriores serão substituídos.');">
+                      data-confirm-title="Reprocessar vídeo"
+                      data-confirm="Reprocessar com detecção padrão? Fotos, clipes, eventos e relatórios anteriores serão substituídos."
+                      data-confirm-variant="primary">
                 Reprocessar
               </button>
               <button type="submit" name="sensitive" value="1" class="btn btn-sm btn-outline-warning"
-                      onclick="return confirm('Reprocessar com detecção sensível? Pode gerar mais falsos positivos.');">
+                      data-confirm-title="Reprocessar sensível"
+                      data-confirm="Reprocessar com detecção sensível? Pode gerar mais falsos positivos e substituirá todo o material anterior."
+                      data-confirm-variant="warning">
                 Reprocessar com mais sensibilidade
               </button>
             </div>
@@ -146,7 +153,9 @@
         {% endif %}
         {% if job.status == 'done' and job.analysis_version == 1 and not job_v2 %}
         <form class="mb-3" action="/web/jobs/{{ job.id }}/sensitive-v2" method="post"
-              onsubmit="return confirm('Gerar uma versão sensível com caixas de detecção em clipes, compilados e relatórios? A versão padrão permanece.');">
+              data-confirm-title="Versão sensível"
+              data-confirm="Gerar versão sensível com caixas de detecção em clipes, compilados e relatórios? A versão padrão permanece."
+              data-confirm-variant="warning">
           <button type="submit" class="btn btn-warning">
             Gerar versão sensível
           </button>
@@ -179,7 +188,6 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="/static/detection-classes.js"></script>
 {% if job.status in ('queued', 'running') %}
 <script>
   setTimeout(function () { window.location.reload(); }, 5000);

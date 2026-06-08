@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros.html" import breadcrumb, page_header, event_times, video_block, delete_event_button %}
+{% from "macros.html" import breadcrumb, page_header, event_times, video_block, delete_event_button, flash_alert %}
 {% block title %}Evento #{{ event.id }} — Analisador{% endblock %}
 {% block content %}
 {{ breadcrumb([("Início", "/"), ("Eventos", "/events"), ("#" ~ event.id, None)]) }}
@@ -12,6 +12,8 @@
 </div>
 
 {{ page_header("Evento #" ~ event.id, video.filename if video else "Vídeo #" ~ event.video_id) }}
+
+{{ flash_alert(flash_ok, flash_level) }}
 
 <div class="detail-grid">
   <div class="card card-app">
@@ -51,13 +53,17 @@
         <span>Clipe do evento</span>
         <div class="d-flex flex-wrap gap-2">
           <form action="/web/events/{{ event.id }}/annotate-clip" method="post" class="d-inline"
-                onsubmit="return confirm('Gerar caixas de detecção padrão (~50% confiança)?');">
+                data-confirm-title="Caixas padrão"
+                data-confirm="Gerar caixas de detecção padrão (~50% confiança)?"
+                data-confirm-variant="primary">
             <button type="submit" class="btn btn-sm btn-outline-secondary">
               Caixas padrão
             </button>
           </form>
           <form action="/web/events/{{ event.id }}/annotate-clip" method="post" class="d-inline"
-                onsubmit="return confirm('Gerar caixas de detecção sensíveis (~22% confiança)? Pode encontrar mais objetos em frames difíceis.');">
+                data-confirm-title="Caixas sensíveis"
+                data-confirm="Gerar caixas de detecção sensíveis (~22% confiança)? Pode encontrar mais objetos em frames difíceis."
+                data-confirm-variant="warning">
             <input type="hidden" name="sensitive" value="true">
             <button type="submit" class="btn btn-sm btn-outline-warning">
               Caixas sensíveis

@@ -284,7 +284,8 @@ def _run_pipeline(
                 clip_start, clip_end = clip_time_range(
                     m.start_time_sec,
                     m.end_time_sec,
-                    cfg.clip_padding_sec,
+                    cfg.clip_padding_before_sec,
+                    cfg.clip_padding_after_sec,
                     duration,
                 )
                 det_t = (

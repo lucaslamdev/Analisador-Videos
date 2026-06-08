@@ -39,6 +39,14 @@ python -m pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
+**GPU NVIDIA (opcional, após o passo acima):**
+
+```powershell
+pip install -r requirements-cuda.txt
+```
+
+Confirme com `python -c "import torch; print(torch.cuda.is_available())"`. Se falhar, tente `requirements-cuda-legacy.txt` (CUDA 12.6). No `.env`, use `DEVICE=auto` ou `DEVICE=cuda`.
+
 **Linux / macOS:**
 
 ```bash
@@ -46,6 +54,7 @@ python3.12 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
 pip install -r requirements.txt
+pip install -r requirements-cuda.txt   # opcional: GPU NVIDIA
 ```
 
 > Sem venv: use `pip install -r requirements.txt` no Python 3.12+ global (menos isolado, mas funciona).
@@ -204,7 +213,7 @@ Principais variáveis (lista completa em `.env.example`):
 | `DATA_DIR` | `data` | Raiz de mídia e SQLite |
 | `VIDEOS_INPUT_DIR` | `incoming` | Pasta monitorada para lotes |
 | `DEVICE` | `auto` | `auto`, `cpu` ou `cuda` |
-| `SAMPLE_FPS` | `1` | Amostragem (1 frame/s de vídeo real) |
+| Amostragem / margens de clipe | — | Definidos na interface web ao processar ou reprocessar (não via `.env`) |
 | `CONFIDENCE_THRESHOLD` | `0.5` | Limiar geral de detecção |
 | `ANNOTATE_SENSITIVE_CONFIDENCE` | `0.22` | Bbox sensível (pessoa) |
 | `ANNOTATE_SENSITIVE_VEHICLE_CONFIDENCE` | `0.18` | Bbox sensível (veículos) |
@@ -232,7 +241,7 @@ Não é necessário GPU nem vídeos reais para a suíte de testes.
 |---------|-------------|
 | `ffmpeg` não encontrado | Instale FFmpeg e confira `ffmpeg -version` no **mesmo** terminal em que roda o uvicorn |
 | Muito lento em CPU | Use perfil `.env.cpu-intel.example`; reduza vídeos simultâneos; confira `FRAME_CACHE_ENABLED_CPU=true` |
-| CUDA não usada | Instale driver NVIDIA + PyTorch com CUDA; defina `DEVICE=cuda` no `.env` |
+| CUDA não usada | `pip install -r requirements-cuda.txt` (substitui o PyTorch CPU); driver NVIDIA atualizado; `DEVICE=auto` ou `cuda` no `.env` |
 | Erro ao importar módulo | Use `--app-dir src` e rode a partir da raiz do clone |
 | Pasta `data/` vazia após clone | Normal — dados são locais; reprocesse vídeos nesta máquina |
 | Lote não acha vídeos em subpastas | MP4 devem estar em `incoming/` **ou subpastas** (versão atual); rode uvicorn na **raiz** do projeto; veja logs `scan_folder` com `--log-level info` |
@@ -252,7 +261,9 @@ Analisador-Videos/
 ├── .env.example             # Modelo de configuração
 ├── .env.cpu-intel.example
 ├── .env.gpu-rtx4060.example
-└── requirements.txt
+├── requirements.txt
+├── requirements-cuda.txt
+└── requirements-cuda-legacy.txt
 ```
 
 Spec e plano de implementação: `docs/superpowers/`.

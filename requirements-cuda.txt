@@ -1,0 +1,15 @@
+# Suporte a GPU NVIDIA (CUDA) — instale DEPOIS do requirements.txt
+#
+#   pip install -r requirements.txt
+#   pip install -r requirements-cuda.txt
+#
+# O wheel do PyTorch já inclui as bibliotecas CUDA; não é necessário
+# instalar o CUDA Toolkit manualmente. Mantenha o driver NVIDIA atualizado.
+#
+# Se cu130 falhar (driver antigo), use o fallback:
+#   pip install -r requirements-cuda-legacy.txt
+
+--extra-index-url https://download.pytorch.org/whl/cu130
+torch>=2.12.0
+torchvision>=0.22.0
+torchaudio>=2.12.0

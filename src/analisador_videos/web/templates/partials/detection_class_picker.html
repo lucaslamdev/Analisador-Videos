@@ -1,9 +1,11 @@
-{# Requer: all_detection_classes, selected_detection_classes (set) #}
-<div class="detection-class-picker mb-3" data-detection-class-picker>
+{# Requer: all_detection_classes, selected_detection_classes (set), people_vehicle_detection_classes #}
+<div class="detection-class-picker mb-3" data-detection-class-picker
+     data-people-vehicle-classes='{{ people_vehicle_detection_classes | tojson }}'>
   <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
     <label class="form-label mb-0 small fw-semibold">Classes a detectar</label>
-    <div class="btn-group btn-group-sm">
+    <div class="d-flex flex-wrap gap-1">
       <button type="button" class="btn btn-outline-secondary btn-sm" data-class-pick-all>Todas</button>
+      <button type="button" class="btn btn-outline-secondary btn-sm" data-class-pick-people-vehicles>Veículos/Pessoas</button>
       <button type="button" class="btn btn-outline-secondary btn-sm" data-class-pick-none>Nenhuma</button>
     </div>
   </div>

@@ -1,0 +1,13 @@
+{# Requer: health dict de health_info() #}
+<span class="health-pill health-pill-{{ health.mode }}"
+      title="{{ health.detection_summary }}{% if health.config_warning %}&#10;Aviso: {{ health.config_warning }}{% endif %}">
+  <i class="bi bi-{{ 'gpu-card' if health.mode == 'gpu' else 'cpu' }}" aria-hidden="true"></i>
+  <span class="health-pill-label">{{ health.mode_label }}</span>
+  {% if health.device_name %}
+  <span class="health-pill-device d-none d-xl-inline">{{ health.device_name }}</span>
+  {% endif %}
+  {% if health.config_warning %}
+  <i class="bi bi-exclamation-triangle-fill health-pill-warn" aria-hidden="true"
+     title="{{ health.config_warning }}"></i>
+  {% endif %}
+</span>

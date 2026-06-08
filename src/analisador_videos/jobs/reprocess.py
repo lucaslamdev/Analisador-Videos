@@ -37,6 +37,10 @@ def create_reprocess_job(
     confidence_threshold: float | None = None,
     person_confidence: float | None = None,
     vehicle_confidence: float | None = None,
+    sample_fps: float | None = None,
+    clip_padding_before_sec: float | None = None,
+    clip_padding_after_sec: float | None = None,
+    event_merge_gap_sec: float | None = None,
 ) -> Job:
     """
     Cria novo job para o mesmo vídeo, sem reprocessar o lote inteiro.
@@ -84,6 +88,10 @@ def create_reprocess_job(
         confidence_threshold=confidence_threshold,
         person_confidence=person_confidence,
         vehicle_confidence=vehicle_confidence,
+        sample_fps=sample_fps,
+        clip_padding_before_sec=clip_padding_before_sec,
+        clip_padding_after_sec=clip_padding_after_sec,
+        event_merge_gap_sec=event_merge_gap_sec,
     )
     params = json.loads(params_json)
     params["reprocess_of"] = parent.id
@@ -120,6 +128,10 @@ def create_batch_reprocess_jobs(
     confidence_threshold: float | None = None,
     person_confidence: float | None = None,
     vehicle_confidence: float | None = None,
+    sample_fps: float | None = None,
+    clip_padding_before_sec: float | None = None,
+    clip_padding_after_sec: float | None = None,
+    event_merge_gap_sec: float | None = None,
 ) -> list[Job]:
     """Reprocessa o último job elegível de cada vídeo do lote."""
     jobs = list(
@@ -145,6 +157,10 @@ def create_batch_reprocess_jobs(
                 confidence_threshold=confidence_threshold,
                 person_confidence=person_confidence,
                 vehicle_confidence=vehicle_confidence,
+                sample_fps=sample_fps,
+                clip_padding_before_sec=clip_padding_before_sec,
+                clip_padding_after_sec=clip_padding_after_sec,
+                event_merge_gap_sec=event_merge_gap_sec,
             )
             created.append(new_job)
         except ValueError:

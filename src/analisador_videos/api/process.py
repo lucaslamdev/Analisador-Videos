@@ -33,6 +33,10 @@ class FolderProcessRequest(BaseModel):
     confidence_threshold: float | None = None
     person_confidence: float | None = None
     vehicle_confidence: float | None = None
+    sample_fps: float | None = None
+    clip_padding_before_sec: float | None = None
+    clip_padding_after_sec: float | None = None
+    event_merge_gap_sec: float | None = None
 
 
 def _resolve_batch(
@@ -71,6 +75,10 @@ async def process_video(
     confidence_threshold: float | None = Query(None, ge=0.01, le=1.0),
     person_confidence: float | None = Query(None, ge=0.01, le=1.0),
     vehicle_confidence: float | None = Query(None, ge=0.01, le=1.0),
+    sample_fps: float | None = Query(None, ge=0.5, le=10.0),
+    clip_padding_before_sec: float | None = Query(None, ge=0.0, le=60.0),
+    clip_padding_after_sec: float | None = Query(None, ge=0.0, le=60.0),
+    event_merge_gap_sec: float | None = Query(None, ge=0.0, le=60.0),
     file: UploadFile | None = File(None),
     body: FolderProcessRequest | None = Body(None),
     db: Session = Depends(get_db),
@@ -144,12 +152,34 @@ async def process_video(
             body.vehicle_confidence if body and body.vehicle_confidence is not None
             else vehicle_confidence
         )
+        req_sample_fps = (
+            body.sample_fps if body and body.sample_fps is not None else sample_fps
+        )
+        req_clip_before = (
+            body.clip_padding_before_sec
+            if body and body.clip_padding_before_sec is not None
+            else clip_padding_before_sec
+        )
+        req_clip_after = (
+            body.clip_padding_after_sec
+            if body and body.clip_padding_after_sec is not None
+            else clip_padding_after_sec
+        )
+        req_merge_gap = (
+            body.event_merge_gap_sec
+            if body and body.event_merge_gap_sec is not None
+            else event_merge_gap_sec
+        )
         if (
             req_sensitive
             or req_classes is not None
             or req_conf is not None
             or req_person is not None
             or req_veh is not None
+            or req_sample_fps is not None
+            or req_clip_before is not None
+            or req_clip_after is not None
+            or req_merge_gap is not None
         ):
             params_json = build_detection_params_json(
                 sensitive=req_sensitive,
@@ -157,6 +187,10 @@ async def process_video(
                 confidence_threshold=req_conf,
                 person_confidence=req_person,
                 vehicle_confidence=req_veh,
+                sample_fps=req_sample_fps,
+                clip_padding_before_sec=req_clip_before,
+                clip_padding_after_sec=req_clip_after,
+                event_merge_gap_sec=req_merge_gap,
             )
         job = create_job(db, video.id, batch_id=batch_id, params_json=params_json)
         entry = {

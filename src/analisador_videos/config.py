@@ -1,7 +1,49 @@
 from pathlib import Path
+from typing import Any
 
 from pydantic import field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic.fields import FieldInfo
+from pydantic_settings import BaseSettings, PydanticBaseSettingsSource, SettingsConfigDict
+
+from analisador_videos.pipeline_ui_defaults import (
+    CLIP_PADDING_AFTER_SEC,
+    CLIP_PADDING_BEFORE_SEC,
+    SAMPLE_FPS,
+)
+
+_PIPELINE_ENV_IGNORE = frozenset(
+    {
+        "sample_fps",
+        "clip_padding_before_sec",
+        "clip_padding_after_sec",
+        "clip_padding_sec",
+    }
+)
+
+
+class _IgnorePipelineEnvSource(PydanticBaseSettingsSource):
+    """Ignora variáveis de ambiente dos parâmetros controlados pela interface."""
+
+    def __init__(self, settings_cls: type[BaseSettings], inner: PydanticBaseSettingsSource):
+        super().__init__(settings_cls)
+        self._inner = inner
+
+    def get_field_value(
+        self, field: FieldInfo, field_name: str
+    ) -> tuple[Any, str, bool]:
+        if field_name in _PIPELINE_ENV_IGNORE:
+            return field.get_default(call_default_factory=True), field_name, False
+        return self._inner.get_field_value(field, field_name)
+
+    def __call__(self) -> dict[str, Any]:
+        return {
+            field_name: value
+            for field_name, value in self._inner().items()
+            if field_name not in _PIPELINE_ENV_IGNORE
+        }
+
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}(inner={self._inner!r})"
 
 
 class Settings(BaseSettings):
@@ -10,8 +52,11 @@ class Settings(BaseSettings):
     data_dir: Path = Path("data")
     videos_input_dir: Path = Path("incoming")
     event_merge_gap_sec: float = 3.0
-    sample_fps: float = 1.0
-    clip_padding_sec: float = 2.0
+    # Valores de runtime via params_json/UI; .env ignorado (ver _IgnorePipelineEnvSource).
+    sample_fps: float = SAMPLE_FPS
+    clip_padding_before_sec: float = CLIP_PADDING_BEFORE_SEC
+    clip_padding_after_sec: float = CLIP_PADDING_AFTER_SEC
+    clip_padding_sec: float = 2.0  # legado (jobs antigos em params_json)
     device: str = "auto"
     confidence_threshold: float = 0.5
     person_confidence: float = 0.45
@@ -56,6 +101,22 @@ class Settings(BaseSettings):
     @property
     def sqlite_url(self) -> str:
         return f"sqlite:///{self.data_dir / 'db.sqlite'}"
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls,
+        init_settings,
+        env_settings,
+        dotenv_settings,
+        file_secret_settings,
+    ):
+        return (
+            init_settings,
+            _IgnorePipelineEnvSource(settings_cls, env_settings),
+            _IgnorePipelineEnvSource(settings_cls, dotenv_settings),
+            file_secret_settings,
+        )
 
 
 settings = Settings()

@@ -6,16 +6,17 @@ from pathlib import Path
 def clip_time_range(
     start_sec: float,
     end_sec: float,
-    padding_sec: float,
+    padding_before_sec: float,
+    padding_after_sec: float,
     duration_sec: float,
 ) -> tuple[float, float]:
-    start = max(0.0, start_sec - padding_sec)
+    start = max(0.0, start_sec - padding_before_sec)
     if duration_sec > 0:
         # Pequena folga evita seek no frame inexistente (ex.: 3600.0s em vídeo de 1 h).
         end_cap = max(0.0, duration_sec - 0.05)
-        end = min(end_cap, end_sec + padding_sec)
+        end = min(end_cap, end_sec + padding_after_sec)
     else:
-        end = end_sec + padding_sec
+        end = end_sec + padding_after_sec
     if start > end:
         start = end
     return start, end

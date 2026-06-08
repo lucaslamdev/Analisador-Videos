@@ -20,7 +20,13 @@ def test_clamp_seek_time_at_video_end():
 
 
 def test_clip_time_range_caps_before_duration():
-    start, end = clip_time_range(3590.0, 3598.0, padding_sec=2.0, duration_sec=3600.0)
+    start, end = clip_time_range(
+        3590.0,
+        3598.0,
+        padding_before_sec=2.0,
+        padding_after_sec=2.0,
+        duration_sec=3600.0,
+    )
     assert start == 3588.0
     assert end == 3599.95
 

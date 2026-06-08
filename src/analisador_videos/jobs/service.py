@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from analisador_videos.config import settings
 from analisador_videos.db.models import Job
+from analisador_videos.jobs.detection_params import _pipeline_defaults
 from analisador_videos.jobs.queue import run_with_slot
 from analisador_videos.pipeline.compute import health_info, resolve_runtime
 
@@ -18,9 +19,10 @@ def job_params_snapshot() -> str:
     info = health_info()
     return json.dumps(
         {
-            "event_merge_gap_sec": settings.event_merge_gap_sec,
-            "sample_fps": settings.sample_fps,
-            "clip_padding_sec": settings.clip_padding_sec,
+            "event_merge_gap_sec": _pipeline_defaults()["event_merge_gap_sec"],
+            "sample_fps": _pipeline_defaults()["sample_fps"],
+            "clip_padding_before_sec": _pipeline_defaults()["clip_padding_before_sec"],
+            "clip_padding_after_sec": _pipeline_defaults()["clip_padding_after_sec"],
             "device": settings.device,
             "device_used": info["backend"],
             "gpu_name": info.get("device_name"),

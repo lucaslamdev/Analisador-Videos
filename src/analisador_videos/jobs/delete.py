@@ -1,7 +1,7 @@
 import shutil
 from pathlib import Path
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from analisador_videos.config import settings
@@ -70,6 +70,42 @@ def _cleanup_batch_report_files(slug: str) -> None:
     _unlink_file(settings.data_dir / "supercuts" / f"{slug}.zip")
 
 
+def _batch_is_empty(db: Session, batch_id: int) -> bool:
+    videos = (
+        db.scalar(
+            select(func.count()).select_from(Video).where(Video.batch_id == batch_id)
+        )
+        or 0
+    )
+    jobs = (
+        db.scalar(
+            select(func.count()).select_from(Job).where(Job.batch_id == batch_id)
+        )
+        or 0
+    )
+    return videos == 0 and jobs == 0
+
+
+def _delete_batch_record(db: Session, batch: Batch) -> None:
+    _cleanup_batch_report_files(batch.slug)
+    db.delete(batch)
+
+
+def _cleanup_orphan_batch(db: Session, batch_id: int | None) -> None:
+    """Remove lote vazio após excluir o último vídeo."""
+    if batch_id is None:
+        return
+    children = list(
+        db.scalars(select(Batch).where(Batch.parent_batch_id == batch_id))
+    )
+    for child in children:
+        if _batch_is_empty(db, child.id):
+            _delete_batch_record(db, child)
+    batch = db.get(Batch, batch_id)
+    if batch and _batch_is_empty(db, batch_id):
+        _delete_batch_record(db, batch)
+
+
 def delete_video(db: Session, video_id: int) -> bool:
     """Remove vídeo, jobs, eventos, mídia em disco e relatórios."""
     video = db.get(Video, video_id)
@@ -105,7 +141,10 @@ def delete_video(db: Session, video_id: int) -> bool:
     _unlink_file(video.path)
 
     db.query(Event).filter(Event.video_id == video_id).delete()
+    batch_id = video.batch_id
     db.delete(video)
+    db.flush()
+    _cleanup_orphan_batch(db, batch_id)
     db.commit()
     return True
 

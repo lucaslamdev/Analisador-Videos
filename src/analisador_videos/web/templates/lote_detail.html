@@ -1,10 +1,12 @@
 {% extends "base.html" %}
-{% from "macros.html" import breadcrumb, page_header, status_badge, event_times, empty_state, cancel_job_button, delete_job_button, reprocess_job_buttons, job_export_buttons, batch_export_buttons %}
+{% from "macros.html" import breadcrumb, page_header, status_badge, event_times, empty_state, cancel_job_button, delete_job_button, reprocess_job_buttons, job_export_buttons, batch_export_buttons, flash_alert %}
 {% block title %}Lote {{ batch.slug }} — Analisador{% endblock %}
 {% block content %}
 {{ breadcrumb([("Início", "/"), (batch.slug, None)]) }}
 
 {{ page_header("Lote " ~ batch.slug, "Criado em " ~ batch.created_at.strftime("%d/%m/%Y %H:%M")) }}
+
+{{ flash_alert(flash_ok, flash_level) }}
 
 {% if retry_error %}
 <div class="alert alert-danger" role="alert">{{ retry_error }}</div>
@@ -17,7 +19,9 @@
     <span class="vr d-none d-md-inline mx-1"></span>
     {% if active_jobs_count > 0 %}
     <form action="/web/lotes/{{ batch.slug }}/cancel" method="post" class="d-inline"
-          onsubmit="return confirm('Cancelar {{ active_jobs_count }} processamento(s) ativo(s)?');">
+          data-confirm-title="Cancelar lote"
+          data-confirm="Cancelar {{ active_jobs_count }} processamento(s) ativo(s) neste lote?"
+          data-confirm-variant="warning">
       <button type="submit" class="btn btn-sm btn-outline-warning">
         <i class="bi bi-x-octagon me-1" aria-hidden="true"></i>Cancelar lote
       </button>
@@ -25,7 +29,9 @@
     {% endif %}
     {% if batch.analysis_version == 1 and not batch_v2 %}
     <form action="/web/lotes/{{ batch.slug }}/sensitive-v2" method="post" class="d-inline"
-          onsubmit="return confirm('Gerar uma versão sensível do lote com caixas de detecção e relatórios para todos os vídeos? A versão padrão permanece.');">
+          data-confirm-title="Versão sensível do lote"
+          data-confirm="Gerar versão sensível com caixas de detecção e relatórios para todos os vídeos? A versão padrão permanece."
+          data-confirm-variant="warning">
       <button type="submit" class="btn btn-sm btn-warning">
         Versão sensível do lote
       </button>
@@ -36,7 +42,9 @@
     <a class="btn btn-sm btn-outline-primary" href="/lotes/{{ batch.slug }}/reports/v2/html" target="_blank">Relatório sensível</a>
     {% endif %}
     <form action="/web/lotes/{{ batch.slug }}/delete" method="post" class="d-inline"
-          onsubmit="return confirm('Excluir o lote inteiro com todos os vídeos, processamentos, fotos, clipes, eventos e relatórios? Esta ação não pode ser desfeita.');">
+          data-confirm-title="Excluir lote"
+          data-confirm="Excluir o lote inteiro com todos os vídeos, processamentos, fotos, clipes, eventos e relatórios? Esta ação não pode ser desfeita."
+          data-confirm-variant="danger">
       <button type="submit" class="btn btn-sm btn-outline-danger">
         Excluir lote
       </button>
@@ -57,14 +65,19 @@
       <input type="hidden" name="use_class_picker" value="1">
       {% set picker_id = "batch-reprocess" %}
       {% include "partials/detection_thresholds.html" %}
+      {% include "partials/pipeline_params.html" %}
       {% include "partials/detection_class_picker.html" %}
       <div class="d-flex flex-wrap gap-2">
         <button type="submit" name="sensitive" value="0" class="btn btn-sm btn-outline-primary"
-                onclick="return confirm('Reprocessar todos os vídeos elegíveis com detecção padrão? Mídia e eventos anteriores serão substituídos.');">
+                data-confirm-title="Reprocessar lote"
+                data-confirm="Reprocessar todos os vídeos elegíveis com detecção padrão? Mídia e eventos anteriores serão substituídos."
+                data-confirm-variant="primary">
           <i class="bi bi-arrow-clockwise me-1" aria-hidden="true"></i>Reprocessar lote
         </button>
         <button type="submit" name="sensitive" value="1" class="btn btn-sm btn-outline-warning"
-                onclick="return confirm('Reprocessar o lote com detecção sensível? Pode gerar mais falsos positivos.');">
+                data-confirm-title="Reprocessar lote sensível"
+                data-confirm="Reprocessar o lote com detecção sensível? Pode gerar mais falsos positivos."
+                data-confirm-variant="warning">
           <i class="bi bi-eye me-1" aria-hidden="true"></i>Reprocessar sensível
         </button>
       </div>
@@ -184,9 +197,6 @@
 {% endblock %}
 
 {% block scripts %}
-{% if reprocessable_jobs_count > 0 %}
-<script src="/static/detection-classes.js"></script>
-{% endif %}
 {% if active_jobs_count > 0 %}
 <script src="/static/batch-progress.js"></script>
 {% endif %}

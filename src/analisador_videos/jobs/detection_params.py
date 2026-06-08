@@ -4,10 +4,15 @@ import json
 
 from analisador_videos.config import Settings, settings
 from analisador_videos.jobs.stage_timings import strip_runtime_params
+from analisador_videos.pipeline_ui_defaults import pipeline_ui_defaults
 from analisador_videos.util.detection_classes import classes_for_storage
 
 THRESHOLD_MIN = 0.01
 THRESHOLD_MAX = 1.0
+SAMPLE_FPS_MIN = 0.5
+SAMPLE_FPS_MAX = 10.0
+CLIP_PADDING_MIN = 0.0
+CLIP_PADDING_MAX = 60.0
 
 
 def _threshold_defaults_for_mode(mode: str) -> dict[str, float]:
@@ -22,6 +27,46 @@ def _threshold_defaults_for_mode(mode: str) -> dict[str, float]:
         "person_confidence": settings.person_confidence,
         "vehicle_confidence": settings.vehicle_confidence,
     }
+
+
+def _pipeline_defaults() -> dict[str, float]:
+    return {
+        **pipeline_ui_defaults(),
+        "event_merge_gap_sec": settings.event_merge_gap_sec,
+    }
+
+
+def _pipeline_overrides_from_params(params: dict) -> dict[str, float]:
+    """Resolve amostragem e margens de clipe a partir do job ou padrões da interface."""
+    defaults = _pipeline_defaults()
+    overrides: dict[str, float] = {
+        "sample_fps": float(params["sample_fps"])
+        if "sample_fps" in params
+        else defaults["sample_fps"],
+    }
+    margins = clip_margins_from_params(params)
+    if margins:
+        overrides["clip_padding_before_sec"] = margins[0]
+        overrides["clip_padding_after_sec"] = margins[1]
+    else:
+        overrides["clip_padding_before_sec"] = defaults["clip_padding_before_sec"]
+        overrides["clip_padding_after_sec"] = defaults["clip_padding_after_sec"]
+    return overrides
+
+
+def clip_margins_from_params(params: dict) -> tuple[float, float] | None:
+    """Resolve margens de clipe; None se params não tiver chaves de padding."""
+    before = params.get("clip_padding_before_sec")
+    after = params.get("clip_padding_after_sec")
+    if before is not None or after is not None:
+        b = float(before if before is not None else after)
+        a = float(after if after is not None else before)
+        return b, a
+    legacy = params.get("clip_padding_sec")
+    if legacy is not None:
+        v = float(legacy)
+        return v, v
+    return None
 
 
 def thresholds_for_ui(params_json: str | None = None) -> dict[str, float]:
@@ -57,6 +102,27 @@ def thresholds_for_ui(params_json: str | None = None) -> dict[str, float]:
     return _threshold_defaults_for_mode("standard")
 
 
+def pipeline_params_for_ui(params_json: str | None = None) -> dict[str, float]:
+    """Valores padrão para inputs de amostragem e margens de clipe na UI."""
+    defaults = _pipeline_defaults()
+    if not params_json:
+        return defaults
+    try:
+        params = json.loads(params_json)
+    except json.JSONDecodeError:
+        return defaults
+
+    result = dict(defaults)
+    if "sample_fps" in params:
+        result["sample_fps"] = float(params["sample_fps"])
+    if "event_merge_gap_sec" in params:
+        result["event_merge_gap_sec"] = float(params["event_merge_gap_sec"])
+    margins = clip_margins_from_params(params)
+    if margins:
+        result["clip_padding_before_sec"], result["clip_padding_after_sec"] = margins
+    return result
+
+
 def parse_threshold_value(raw: str | float | None, *, field: str) -> float:
     """Valida limiar vindo de formulário ou API (0.01–1.0)."""
     if raw is None or (isinstance(raw, str) and not raw.strip()):
@@ -70,6 +136,34 @@ def parse_threshold_value(raw: str | float | None, *, field: str) -> float:
     return value
 
 
+def parse_sample_fps(raw: str | float | None, *, field: str = "Amostragem (fps)") -> float:
+    if raw is None or (isinstance(raw, str) and not raw.strip()):
+        raise ValueError(f"{field} é obrigatório")
+    try:
+        value = float(raw)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{field} inválido") from exc
+    if not SAMPLE_FPS_MIN <= value <= SAMPLE_FPS_MAX:
+        raise ValueError(f"{field} deve estar entre {SAMPLE_FPS_MIN} e {SAMPLE_FPS_MAX}")
+    return value
+
+
+def parse_clip_padding(
+    raw: str | float | None,
+    *,
+    field: str,
+) -> float:
+    if raw is None or (isinstance(raw, str) and not raw.strip()):
+        raise ValueError(f"{field} é obrigatório")
+    try:
+        value = float(raw)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{field} inválido") from exc
+    if not CLIP_PADDING_MIN <= value <= CLIP_PADDING_MAX:
+        raise ValueError(f"{field} deve estar entre {CLIP_PADDING_MIN} e {CLIP_PADDING_MAX}")
+    return value
+
+
 def build_detection_params_json(
     base_params: dict | None = None,
     *,
@@ -78,6 +172,10 @@ def build_detection_params_json(
     confidence_threshold: float | None = None,
     person_confidence: float | None = None,
     vehicle_confidence: float | None = None,
+    sample_fps: float | None = None,
+    clip_padding_before_sec: float | None = None,
+    clip_padding_after_sec: float | None = None,
+    event_merge_gap_sec: float | None = None,
 ) -> str:
     """
     Monta params_json do job.
@@ -90,14 +188,19 @@ def build_detection_params_json(
     params = strip_runtime_params(dict(base_params or {}))
     if "confidence_threshold" in params and "person_confidence" not in params:
         params["person_confidence"] = params["confidence_threshold"]
-    params.update(
-        {
-            "event_merge_gap_sec": settings.event_merge_gap_sec,
-            "sample_fps": settings.sample_fps,
-            "clip_padding_sec": settings.clip_padding_sec,
-            "device": settings.device,
-        }
-    )
+
+    defaults = _pipeline_defaults()
+    params.setdefault("event_merge_gap_sec", defaults["event_merge_gap_sec"])
+    params.setdefault("sample_fps", defaults["sample_fps"])
+    if clip_margins_from_params(params) is None:
+        params.setdefault("clip_padding_before_sec", defaults["clip_padding_before_sec"])
+        params.setdefault("clip_padding_after_sec", defaults["clip_padding_after_sec"])
+    else:
+        before, after = clip_margins_from_params(params) or (defaults["clip_padding_before_sec"], defaults["clip_padding_after_sec"])
+        params.setdefault("clip_padding_before_sec", before)
+        params.setdefault("clip_padding_after_sec", after)
+    params.setdefault("device", settings.device)
+
     mode_defaults = _threshold_defaults_for_mode("sensitive" if sensitive else "standard")
     if sensitive:
         params["detection_mode"] = "sensitive"
@@ -115,6 +218,15 @@ def build_detection_params_json(
         params["person_confidence"] = person_confidence
     if vehicle_confidence is not None:
         params["vehicle_confidence"] = vehicle_confidence
+    if sample_fps is not None:
+        params["sample_fps"] = sample_fps
+    if clip_padding_before_sec is not None:
+        params["clip_padding_before_sec"] = clip_padding_before_sec
+    if clip_padding_after_sec is not None:
+        params["clip_padding_after_sec"] = clip_padding_after_sec
+    if event_merge_gap_sec is not None:
+        params["event_merge_gap_sec"] = event_merge_gap_sec
+    params.pop("clip_padding_sec", None)
     if detection_classes is not None:
         stored = classes_for_storage(detection_classes)
         if stored is not None:
@@ -126,16 +238,16 @@ def build_detection_params_json(
 
 def detection_settings_for_job(params_json: str | None) -> Settings:
     """Settings com limiares do job (padrão, sensível ou customizados em params_json)."""
-    if not params_json:
-        return settings
-    try:
-        params = json.loads(params_json)
-    except json.JSONDecodeError:
-        return settings
+    params: dict = {}
+    if params_json:
+        try:
+            params = json.loads(params_json)
+        except json.JSONDecodeError:
+            params = {}
 
     mode = params.get("detection_mode", "standard")
     mode_defaults = _threshold_defaults_for_mode(mode)
-    overrides: dict = {}
+    overrides: dict = dict(_pipeline_overrides_from_params(params))
 
     if "confidence_threshold" in params:
         overrides["confidence_threshold"] = float(params["confidence_threshold"])
@@ -155,10 +267,7 @@ def detection_settings_for_job(params_json: str | None) -> Settings:
     elif mode == "sensitive":
         overrides["vehicle_confidence"] = mode_defaults["vehicle_confidence"]
 
-    for key in ("sample_fps", "event_merge_gap_sec", "clip_padding_sec"):
-        if key in params:
-            overrides[key] = params[key]
+    if "event_merge_gap_sec" in params:
+        overrides["event_merge_gap_sec"] = params["event_merge_gap_sec"]
 
-    if not overrides:
-        return settings
     return settings.model_copy(update=overrides)

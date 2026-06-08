@@ -1,0 +1,9 @@
+# Fallback CUDA 12.6 — drivers NVIDIA mais antigos
+#
+#   pip uninstall torch torchvision torchaudio -y
+#   pip install -r requirements-cuda-legacy.txt
+
+--extra-index-url https://download.pytorch.org/whl/cu126
+torch>=2.12.0
+torchvision>=0.22.0
+torchaudio>=2.12.0

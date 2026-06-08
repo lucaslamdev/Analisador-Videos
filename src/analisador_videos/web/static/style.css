@@ -120,18 +120,68 @@ a:hover {
   background: rgba(59, 130, 246, 0.14);
 }
 
+.health-pill-wrap {
+  display: flex;
+  align-items: center;
+}
+
 .health-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
   font-size: 0.75rem;
-  padding: 0.25rem 0.65rem;
+  padding: 0.3rem 0.7rem;
   border-radius: 999px;
   background: var(--app-surface-2);
   border: 1px solid var(--app-border);
   color: var(--app-text-muted);
+  line-height: 1.2;
+  max-width: min(100%, 20rem);
 }
 
-.health-pill strong {
-  color: var(--app-success);
+.health-pill-label {
   font-weight: 600;
+  color: var(--app-text);
+  white-space: nowrap;
+}
+
+.health-pill-device {
+  font-size: 0.7rem;
+  color: var(--app-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 11rem;
+}
+
+.health-pill-warn {
+  color: var(--bs-warning);
+  font-size: 0.7rem;
+}
+
+.health-pill-cpu {
+  border-color: rgba(148, 163, 184, 0.35);
+}
+
+.health-pill-cpu .health-pill-label {
+  color: #cbd5e1;
+}
+
+.health-pill-gpu {
+  border-color: rgba(34, 197, 94, 0.35);
+  background: rgba(34, 197, 94, 0.08);
+}
+
+.health-pill-gpu .health-pill-label {
+  color: #86efac;
+}
+
+.health-pill-gpu > .bi {
+  color: #4ade80;
+}
+
+.health-pill-cpu > .bi {
+  color: #94a3b8;
 }
 
 /* Layout — mais largo que o container padrão do Bootstrap (1320px) */
@@ -581,6 +631,7 @@ a:hover {
 }
 
 .detection-thresholds,
+.pipeline-params,
 .detection-class-picker {
   padding-top: 0.1rem;
 }

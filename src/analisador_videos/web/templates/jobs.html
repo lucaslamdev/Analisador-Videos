@@ -1,8 +1,10 @@
 {% extends "base.html" %}
-{% from "macros.html" import page_header, status_badge, progress_bar, stage_badge, empty_state, cancel_job_button, delete_job_button, retry_job_button, job_error_detail, job_export_buttons %}
+{% from "macros.html" import page_header, status_badge, progress_bar, stage_badge, empty_state, cancel_job_button, delete_job_button, retry_job_button, job_error_detail, job_export_buttons, flash_alert %}
 {% block title %}Processamentos — Analisador{% endblock %}
 {% block content %}
 {{ page_header("Processamentos", "Acompanhe a fila, o progresso e os avisos das análises.") }}
+
+{{ flash_alert(flash_ok, flash_level) }}
 
 {% if jobs %}
 <div class="card card-app">

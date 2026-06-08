@@ -56,10 +56,21 @@
 </nav>
 {% endmacro %}
 
+{% macro flash_alert(flash_ok, flash_level='success') %}
+{% if flash_ok %}
+<div class="alert alert-{{ flash_level }} alert-dismissible fade show" role="alert">
+  {{ flash_ok }}
+  <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Fechar"></button>
+</div>
+{% endif %}
+{% endmacro %}
+
 {% macro cancel_job_button(job, compact=false) %}
 {% if job.status in ('queued', 'running') %}
 <form action="/web/jobs/{{ job.id }}/cancel" method="post" class="d-inline"
-      onsubmit="return confirm('Cancelar este processamento? A análise será interrompida.');">
+      data-confirm-title="Cancelar processamento"
+      data-confirm="Cancelar este processamento? A análise em andamento será interrompida."
+      data-confirm-variant="warning">
   <button type="submit" class="btn btn-sm btn-outline-warning" title="Cancelar processamento">
     <i class="bi bi-x-circle{% if not compact %} me-1{% endif %}" aria-hidden="true"></i>{% if not compact %}Cancelar{% endif %}
   </button>
@@ -75,7 +86,9 @@
 {% if job.status in ('done', 'failed', 'cancelled') %}
 {% set avulso_hint = 'Para reprocessar fora do lote, use a página do processamento.' %}
 <form action="/web/jobs/{{ job.id }}/reprocess" method="post" class="d-inline"
-      onsubmit="return confirm('Reprocessar este vídeo com detecção padrão? Mídia e eventos anteriores serão substituídos.');">
+      data-confirm-title="Reprocessar vídeo"
+      data-confirm="Reprocessar com detecção padrão? Fotos, clipes, eventos e relatórios anteriores deste vídeo serão substituídos."
+      data-confirm-variant="primary">
   <input type="hidden" name="sensitive" value="0">
   <input type="hidden" name="keep_batch" value="1">
   <button type="submit" class="btn btn-sm btn-outline-primary"
@@ -84,7 +97,9 @@
   </button>
 </form>
 <form action="/web/jobs/{{ job.id }}/reprocess" method="post" class="d-inline"
-      onsubmit="return confirm('Reprocessar com detecção sensível (limiares mais baixos)? Pode gerar mais falsos positivos.');">
+      data-confirm-title="Reprocessar sensível"
+      data-confirm="Reprocessar com detecção sensível (limiares mais baixos)? Pode gerar mais falsos positivos e substituirá todo o material anterior."
+      data-confirm-variant="warning">
   <input type="hidden" name="sensitive" value="1">
   <input type="hidden" name="keep_batch" value="1">
   <button type="submit" class="btn btn-sm btn-outline-warning"
@@ -120,7 +135,9 @@
 
 {% macro delete_event_button(event, compact=false) %}
 <form action="/web/events/{{ event.id }}/delete" method="post" class="d-inline"
-      onsubmit="return confirm('Excluir esta detecção e os arquivos associados (foto, clipe)?');">
+      data-confirm-title="Excluir detecção"
+      data-confirm="Excluir esta detecção e os arquivos associados (foto e clipe)? Esta ação não pode ser desfeita."
+      data-confirm-variant="danger">
   <button type="submit" class="btn btn-sm btn-outline-danger" title="Excluir detecção">
     <i class="bi bi-trash{% if not compact %} me-1{% endif %}" aria-hidden="true"></i>{% if not compact %}Excluir{% endif %}
   </button>
@@ -129,7 +146,9 @@
 
 {% macro delete_job_button(job, compact=false) %}
 <form action="/web/jobs/{{ job.id }}/delete" method="post" class="d-inline"
-      onsubmit="return confirm('Excluir este processamento e tudo relacionado (vídeo, fotos, clipes, eventos e relatórios)? Esta ação não pode ser desfeita.');">
+      data-confirm-title="Excluir processamento"
+      data-confirm="Excluir este processamento e o vídeo inteiro (fotos, clipes, eventos e relatórios)? Se for o último vídeo do lote, o lote também será removido. Esta ação não pode ser desfeita."
+      data-confirm-variant="danger">
   <button type="submit" class="btn btn-sm btn-outline-danger" title="Excluir processamento">
     <i class="bi bi-trash{% if not compact %} me-1{% endif %}" aria-hidden="true"></i>{% if not compact %}Excluir{% endif %}
   </button>

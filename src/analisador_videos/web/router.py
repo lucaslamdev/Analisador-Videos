@@ -5,7 +5,7 @@ from urllib.parse import quote
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, Query, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import func, select
+from sqlalchemy import exists, func, select
 from sqlalchemy.orm import Session
 
 from analisador_videos.config import settings
@@ -57,7 +57,10 @@ from analisador_videos.pipeline.compute import health_info
 from analisador_videos.events.delete import delete_event
 from analisador_videos.jobs.detection_params import (
     build_detection_params_json,
+    parse_clip_padding,
+    parse_sample_fps,
     parse_threshold_value,
+    pipeline_params_for_ui,
     thresholds_for_ui,
 )
 from analisador_videos.jobs.artifact_status import artifact_status_for_ui
@@ -67,6 +70,7 @@ from analisador_videos.jobs.stage_timings import (
 )
 from analisador_videos.util.class_labels import class_label_pt
 from analisador_videos.util.detection_classes import (
+    PEOPLE_VEHICLE_DETECTION_CLASSES,
     ALL_DETECTION_CLASSES,
     normalize_form_classes,
     selected_classes_for_ui,
@@ -88,12 +92,59 @@ templates.env.globals["status_badge_class"] = status_badge_class
 
 router = APIRouter(include_in_schema=False)
 
+FLASH_MESSAGES: dict[str, tuple[str, str]] = {
+    "job_deleted": ("success", "Processamento e vídeo excluídos com sucesso."),
+    "batch_deleted": ("success", "Lote excluído com sucesso."),
+    "event_deleted": ("success", "Detecção excluída com sucesso."),
+    "job_reprocessed": ("success", "Reprocessamento enfileirado."),
+    "batch_reprocessed": ("success", "Reprocessamento do lote enfileirado."),
+    "job_cancelled": ("success", "Processamento cancelado."),
+    "batch_cancelled": ("success", "Processamentos ativos do lote cancelados."),
+}
 
-def _web_context(extra: dict | None = None) -> dict:
+
+def _flash_from_request(request: Request | None) -> dict:
+    if not request:
+        return {}
+    code = request.query_params.get("ok")
+    if not code or code not in FLASH_MESSAGES:
+        return {}
+    level, message = FLASH_MESSAGES[code]
+    return {"flash_ok": message, "flash_level": level}
+
+
+def _web_context(extra: dict | None = None, request: Request | None = None) -> dict:
     ctx = {"health": health_info(), "nav_active": None}
+    ctx.update(_flash_from_request(request))
     if extra:
         ctx.update(extra)
     return ctx
+
+
+def _redirect_with_ok(url: str, code: str) -> RedirectResponse:
+    sep = "&" if "?" in url else "?"
+    return RedirectResponse(f"{url}{sep}ok={quote(code)}", status_code=303)
+
+
+def _redirect_back(
+    request: Request, fallback: str, *, ok: str | None = None
+) -> RedirectResponse:
+    referer = request.headers.get("referer")
+    target = referer if referer and referer.startswith("http") else fallback
+    if ok:
+        return _redirect_with_ok(target, ok)
+    return RedirectResponse(target, status_code=303)
+
+
+def _batches_with_videos(db: Session, *, limit: int | None = None) -> list[Batch]:
+    stmt = (
+        select(Batch)
+        .where(exists(select(Video.id).where(Video.batch_id == Batch.id)))
+        .order_by(Batch.created_at.desc())
+    )
+    if limit is not None:
+        stmt = stmt.limit(limit)
+    return list(db.scalars(stmt))
 
 
 def _video_map(db: Session, video_ids: set[int]) -> dict[int, Video]:
@@ -120,12 +171,17 @@ def _count_active_batch_jobs(db: Session, batch_id: int) -> int:
 def _class_picker_context(params_json: str | None = None) -> dict:
     return {
         "all_detection_classes": ALL_DETECTION_CLASSES,
+        "people_vehicle_detection_classes": PEOPLE_VEHICLE_DETECTION_CLASSES,
         "selected_detection_classes": selected_classes_for_ui(params_json),
     }
 
 
 def _threshold_picker_context(params_json: str | None = None) -> dict:
     return {"detection_thresholds": thresholds_for_ui(params_json)}
+
+
+def _pipeline_picker_context(params_json: str | None = None) -> dict:
+    return {"pipeline_params": pipeline_params_for_ui(params_json)}
 
 
 def _stage_timings_context(params_json: str | None = None) -> dict:
@@ -167,6 +223,33 @@ def _parse_form_thresholds(
     return conf, person, veh
 
 
+def _parse_form_pipeline_params(
+    sample_fps: str | None,
+    clip_padding_before_sec: str | None,
+    clip_padding_after_sec: str | None,
+    *,
+    params_json: str | None = None,
+) -> tuple[float, float, float]:
+    defaults = pipeline_params_for_ui(params_json)
+    if sample_fps in (None, ""):
+        fps = defaults["sample_fps"]
+    else:
+        fps = parse_sample_fps(sample_fps)
+    if clip_padding_before_sec in (None, ""):
+        before = defaults["clip_padding_before_sec"]
+    else:
+        before = parse_clip_padding(
+            clip_padding_before_sec, field="Margem antes do clipe"
+        )
+    if clip_padding_after_sec in (None, ""):
+        after = defaults["clip_padding_after_sec"]
+    else:
+        after = parse_clip_padding(
+            clip_padding_after_sec, field="Margem depois do clipe"
+        )
+    return fps, before, after
+
+
 def _batch_map(db: Session, jobs: list[Job]) -> dict[int, Batch]:
     ids = {j.batch_id for j in jobs if j.batch_id}
     if not ids:
@@ -186,7 +269,7 @@ def index(request: Request, db: Session = Depends(get_db)):
     if missing_video_ids:
         extra_videos = db.scalars(select(Video).where(Video.id.in_(missing_video_ids))).all()
         video_by_id.update({v.id: v for v in extra_videos})
-    lotes = db.scalars(select(Batch).order_by(Batch.created_at.desc()).limit(5)).all()
+    lotes = _batches_with_videos(db, limit=5)
     folder_error = request.query_params.get("folder_error")
     retry_error = request.query_params.get("retry_error")
     folder_path = request.query_params.get("folder") or str(
@@ -214,7 +297,9 @@ def index(request: Request, db: Session = Depends(get_db)):
                 "disk_estimate": disk_estimate,
                 **_class_picker_context(),
                 **_threshold_picker_context(),
-            }
+                **_pipeline_picker_context(),
+            },
+            request=request,
         ),
     )
 
@@ -234,7 +319,8 @@ def jobs_page(request: Request, db: Session = Depends(get_db)):
                 "jobs": jobs,
                 "batches": batches,
                 "videos": videos,
-            }
+            },
+            request=request,
         ),
     )
 
@@ -275,9 +361,11 @@ def job_detail_page(job_id: str, request: Request, db: Session = Depends(get_db)
                 "event_count": event_count,
                 **_class_picker_context(job.params_json),
                 **_threshold_picker_context(job.params_json),
+                **_pipeline_picker_context(job.params_json),
                 **_stage_timings_context(job.params_json),
                 **_artifact_status_context(job.params_json),
-            }
+            },
+            request=request,
         ),
     )
 
@@ -335,7 +423,7 @@ def events_page(
         class_names=class_names,
     )
     videos = db.scalars(select(Video).order_by(Video.filename)).all()
-    lotes = db.scalars(select(Batch).order_by(Batch.created_at.desc())).all()
+    lotes = _batches_with_videos(db)
     classes = distinct_event_class_names(db)
     video_by_id = {v.id: v for v in videos}
     batch_by_slug = {b.slug: b for b in lotes}
@@ -382,7 +470,8 @@ def events_page(
                 ),
                 "video_supercuts": video_supercuts,
                 "parent_job_id": parent_job_id,
-            }
+            },
+            request=request,
         ),
     )
 
@@ -403,7 +492,8 @@ def event_detail(request: Request, event_id: int, db: Session = Depends(get_db))
                 "event": event,
                 "video": video,
                 "batch": batch,
-            }
+            },
+            request=request,
         ),
     )
 
@@ -455,7 +545,9 @@ def lote_detail(slug: str, request: Request, db: Session = Depends(get_db)):
                 "retry_error": request.query_params.get("retry_error"),
                 **_class_picker_context(sample_params),
                 **_threshold_picker_context(sample_params),
-            }
+                **_pipeline_picker_context(sample_params),
+            },
+            request=request,
         ),
     )
 
@@ -490,6 +582,9 @@ async def web_reprocess_job(
     confidence_threshold: str | None = Form(None),
     person_confidence: str | None = Form(None),
     vehicle_confidence: str | None = Form(None),
+    sample_fps: str | None = Form(None),
+    clip_padding_before_sec: str | None = Form(None),
+    clip_padding_after_sec: str | None = Form(None),
     db: Session = Depends(get_db),
 ):
     parent_job = db.get(Job, job_id)
@@ -517,6 +612,18 @@ async def web_reprocess_job(
             status_code=303,
         )
     try:
+        fps, clip_before, clip_after = _parse_form_pipeline_params(
+            sample_fps,
+            clip_padding_before_sec,
+            clip_padding_after_sec,
+            params_json=parent_job.params_json if parent_job else None,
+        )
+    except ValueError as exc:
+        return RedirectResponse(
+            f"/jobs/{job_id}?retry_error={quote(str(exc))}",
+            status_code=303,
+        )
+    try:
         new_job = create_reprocess_job(
             db,
             job_id,
@@ -526,6 +633,9 @@ async def web_reprocess_job(
             confidence_threshold=conf,
             person_confidence=person,
             vehicle_confidence=veh,
+            sample_fps=fps,
+            clip_padding_before_sec=clip_before,
+            clip_padding_after_sec=clip_after,
         )
     except ValueError as exc:
         return RedirectResponse(
@@ -533,7 +643,7 @@ async def web_reprocess_job(
             status_code=303,
         )
     background_tasks.add_task(run_async, new_job.id)
-    return RedirectResponse(f"/jobs/{new_job.id}", status_code=303)
+    return _redirect_with_ok(f"/jobs/{new_job.id}", "job_reprocessed")
 
 
 @router.post("/web/jobs/{job_id}/cancel")
@@ -543,9 +653,7 @@ def web_cancel_job(
     db: Session = Depends(get_db),
 ):
     cancel_job(db, job_id)
-    referer = request.headers.get("referer")
-    target = referer if referer and referer.startswith("http") else f"/jobs/{job_id}"
-    return RedirectResponse(target, status_code=303)
+    return _redirect_back(request, f"/jobs/{job_id}", ok="job_cancelled")
 
 
 @router.post("/web/lotes/{slug}/cancel")
@@ -553,7 +661,7 @@ def web_cancel_batch(slug: str, db: Session = Depends(get_db)):
     batch = get_batch_by_slug(db, slug)
     if batch:
         cancel_batch_jobs(db, batch)
-    return RedirectResponse(f"/lotes/{slug}", status_code=303)
+    return _redirect_with_ok(f"/lotes/{slug}", "batch_cancelled")
 
 
 @router.post("/web/lotes/{slug}/reprocess")
@@ -566,6 +674,9 @@ async def web_reprocess_batch(
     confidence_threshold: str | None = Form(None),
     person_confidence: str | None = Form(None),
     vehicle_confidence: str | None = Form(None),
+    sample_fps: str | None = Form(None),
+    clip_padding_before_sec: str | None = Form(None),
+    clip_padding_after_sec: str | None = Form(None),
     db: Session = Depends(get_db),
 ):
     batch = get_batch_by_slug(db, slug)
@@ -601,6 +712,18 @@ async def web_reprocess_batch(
             f"/lotes/{slug}?retry_error={quote(str(exc))}",
             status_code=303,
         )
+    try:
+        fps, clip_before, clip_after = _parse_form_pipeline_params(
+            sample_fps,
+            clip_padding_before_sec,
+            clip_padding_after_sec,
+            params_json=sample_job.params_json if sample_job else None,
+        )
+    except ValueError as exc:
+        return RedirectResponse(
+            f"/lotes/{slug}?retry_error={quote(str(exc))}",
+            status_code=303,
+        )
 
     try:
         new_jobs = create_batch_reprocess_jobs(
@@ -611,6 +734,9 @@ async def web_reprocess_batch(
             confidence_threshold=conf,
             person_confidence=person,
             vehicle_confidence=veh,
+            sample_fps=fps,
+            clip_padding_before_sec=clip_before,
+            clip_padding_after_sec=clip_after,
         )
     except ValueError as exc:
         return RedirectResponse(
@@ -620,7 +746,7 @@ async def web_reprocess_batch(
 
     for job in new_jobs:
         background_tasks.add_task(run_async, job.id)
-    return RedirectResponse(f"/lotes/{slug}", status_code=303)
+    return _redirect_with_ok(f"/lotes/{slug}", "batch_reprocessed")
 
 
 @router.post("/web/jobs/{job_id}/delete")
@@ -630,10 +756,7 @@ def web_delete_job(
     db: Session = Depends(get_db),
 ):
     delete_job(db, job_id)
-    referer = request.headers.get("referer")
-    if referer and referer.startswith("http"):
-        return RedirectResponse(referer, status_code=303)
-    return RedirectResponse("/jobs", status_code=303)
+    return _redirect_back(request, "/jobs", ok="job_deleted")
 
 
 @router.post("/web/lotes/{slug}/delete")
@@ -641,7 +764,7 @@ def web_delete_batch(slug: str, db: Session = Depends(get_db)):
     batch = get_batch_by_slug(db, slug)
     if batch:
         delete_batch(db, batch)
-    return RedirectResponse("/", status_code=303)
+    return _redirect_with_ok("/", "batch_deleted")
 
 
 @router.get("/lotes/{slug}/relatorio", response_class=HTMLResponse)
@@ -660,6 +783,9 @@ async def web_upload(
     confidence_threshold: str | None = Form(None),
     person_confidence: str | None = Form(None),
     vehicle_confidence: str | None = Form(None),
+    sample_fps: str | None = Form(None),
+    clip_padding_before_sec: str | None = Form(None),
+    clip_padding_after_sec: str | None = Form(None),
     db: Session = Depends(get_db),
 ):
     try:
@@ -672,6 +798,15 @@ async def web_upload(
     try:
         conf, person, veh = _parse_form_thresholds(
             confidence_threshold, vehicle_confidence, person_confidence
+        )
+    except ValueError as exc:
+        return RedirectResponse(
+            f"/?retry_error={quote(str(exc))}",
+            status_code=303,
+        )
+    try:
+        fps, clip_before, clip_after = _parse_form_pipeline_params(
+            sample_fps, clip_padding_before_sec, clip_padding_after_sec
         )
     except ValueError as exc:
         return RedirectResponse(
@@ -695,6 +830,9 @@ async def web_upload(
         confidence_threshold=conf,
         person_confidence=person,
         vehicle_confidence=veh,
+        sample_fps=fps,
+        clip_padding_before_sec=clip_before,
+        clip_padding_after_sec=clip_after,
     )
     job = create_job(db, video.id, params_json=params_json)
     background_tasks.add_task(run_async, job.id)
@@ -708,6 +846,9 @@ async def web_process_folder(
     confidence_threshold: str | None = Form(None),
     person_confidence: str | None = Form(None),
     vehicle_confidence: str | None = Form(None),
+    sample_fps: str | None = Form(None),
+    clip_padding_before_sec: str | None = Form(None),
+    clip_padding_after_sec: str | None = Form(None),
     db: Session = Depends(get_db),
 ):
     try:
@@ -726,11 +867,23 @@ async def web_process_folder(
             f"/?retry_error={quote(str(exc))}",
             status_code=303,
         )
+    try:
+        fps, clip_before, clip_after = _parse_form_pipeline_params(
+            sample_fps, clip_padding_before_sec, clip_padding_after_sec
+        )
+    except ValueError as exc:
+        return RedirectResponse(
+            f"/?retry_error={quote(str(exc))}",
+            status_code=303,
+        )
     params_json = build_detection_params_json(
         detection_classes=classes,
         confidence_threshold=conf,
         person_confidence=person,
         vehicle_confidence=veh,
+        sample_fps=fps,
+        clip_padding_before_sec=clip_before,
+        clip_padding_after_sec=clip_after,
     )
     input_dir = settings.videos_input_dir.resolve()
     paths = scan_folder(settings.videos_input_dir)
@@ -771,10 +924,10 @@ def web_delete_event(
     delete_event(db, event_id)
     referer = request.headers.get("referer")
     if referer and referer.startswith("http"):
-        return RedirectResponse(referer, status_code=303)
+        return _redirect_with_ok(referer, "event_deleted")
     if video_id:
-        return RedirectResponse(f"/events?video_id={video_id}", status_code=303)
-    return RedirectResponse("/events", status_code=303)
+        return _redirect_with_ok(f"/events?video_id={video_id}", "event_deleted")
+    return _redirect_with_ok("/events", "event_deleted")
 
 
 @router.post("/web/supercut/{video_id}")

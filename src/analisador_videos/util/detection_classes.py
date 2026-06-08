@@ -8,6 +8,23 @@ from analisador_videos.util.class_labels import CLASS_LABELS_PT
 
 ALL_DETECTION_CLASSES: tuple[str, ...] = tuple(sorted(CLASS_LABELS_PT.keys()))
 
+# Preset UI: pessoa + classes de transporte (mesmo conjunto de VEHICLE_CLASSES + person)
+PEOPLE_VEHICLE_DETECTION_CLASSES: tuple[str, ...] = tuple(
+    sorted(
+        {
+            "person",
+            "bicycle",
+            "car",
+            "motorcycle",
+            "airplane",
+            "bus",
+            "train",
+            "truck",
+            "boat",
+        }
+    )
+)
+
 
 def parse_detection_classes(params: dict | str | None) -> frozenset[str] | None:
     """Retorna conjunto permitido ou None se todas as classes."""

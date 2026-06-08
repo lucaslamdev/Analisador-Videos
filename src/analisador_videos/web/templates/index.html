@@ -1,8 +1,10 @@
 {% extends "base.html" %}
-{% from "macros.html" import page_header, status_badge, progress_bar, stage_badge, empty_state, cancel_job_button, delete_job_button %}
+{% from "macros.html" import page_header, status_badge, progress_bar, stage_badge, empty_state, cancel_job_button, delete_job_button, flash_alert %}
 {% block title %}Início — Analisador{% endblock %}
 {% block content %}
 {{ page_header("Processar vídeos", "Envie um arquivo ou processe a pasta de entrada. Acompanhe as análises em andamento logo abaixo.") }}
+
+{{ flash_alert(flash_ok, flash_level) }}
 
 {% if retry_error %}
 <div class="alert alert-danger" role="alert">{{ retry_error }}</div>
@@ -34,6 +36,7 @@
           <div class="home-action-section">
             {% set picker_id = "upload" %}
             {% include "partials/detection_thresholds.html" %}
+            {% include "partials/pipeline_params.html" %}
           </div>
           <div class="home-action-section home-action-classes">
             {% include "partials/detection_class_picker.html" %}
@@ -69,6 +72,7 @@
           <div class="home-action-section">
             {% set picker_id = "folder" %}
             {% include "partials/detection_thresholds.html" %}
+            {% include "partials/pipeline_params.html" %}
           </div>
           <div class="home-action-section home-action-classes">
             {% include "partials/detection_class_picker.html" %}
@@ -199,6 +203,4 @@
 </div>
 {% endblock %}
 
-{% block scripts %}
-<script src="/static/detection-classes.js"></script>
-{% endblock %}
+{% block scripts %}{% endblock %}

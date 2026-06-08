@@ -110,3 +110,35 @@ def test_delete_batch_removes_all_videos(tmp_path, monkeypatch):
 
     assert not vf.exists()
     assert not batch_html.exists()
+
+
+def test_delete_job_removes_orphan_batch(tmp_path, monkeypatch):
+    """Ao excluir o último vídeo de um lote, o lote vazio some do dashboard."""
+    monkeypatch.setattr(settings, "data_dir", tmp_path)
+    init_engine()
+    create_tables()
+
+    video_file = tmp_path / "videos" / "solo.mp4"
+    video_file.parent.mkdir(parents=True)
+    video_file.write_bytes(b"fake-mp4")
+
+    with database.SessionLocal() as db:
+        batch, _slug = next_batch_slug(db)
+        v = Video(
+            filename="solo.mp4",
+            path=str(video_file),
+            sha256="solo",
+            batch_id=batch.id,
+            status="done",
+        )
+        db.add(v)
+        db.commit()
+        db.refresh(v)
+        batch_id = batch.id
+
+        db.add(Job(id="del-job-solo", video_id=v.id, batch_id=batch.id, status="done", progress_pct=100))
+        db.commit()
+
+        assert delete_job(db, "del-job-solo")
+        assert db.get(Batch, batch_id) is None
+        assert db.get(Video, v.id) is None

@@ -1,0 +1,28 @@
+{# Requer: pipeline_params dict com sample_fps, clip_padding_before_sec, clip_padding_after_sec #}
+<div class="pipeline-params mb-3">
+  <label class="form-label mb-0 small fw-semibold">Parâmetros de clipe</label>
+  <p class="text-muted small mb-2">
+    Ajuste a precisão temporal e as margens do corte. Mais fps melhora início/fim dos clipes, mas aumenta o tempo de processamento.
+    Estes valores vêm apenas deste formulário (não do arquivo <code>.env</code>).
+  </p>
+  <div class="row g-2">
+    <div class="col-12 col-lg-4">
+      <label class="form-label small mb-1" for="sample-fps-{{ picker_id }}">Amostragem (fps)</label>
+      <input type="number" class="form-control form-control-sm" name="sample_fps"
+             id="sample-fps-{{ picker_id }}" min="0.5" max="10" step="0.5" required
+             value="{{ "%.1f"|format(pipeline_params.sample_fps) }}">
+    </div>
+    <div class="col-12 col-lg-4">
+      <label class="form-label small mb-1" for="clip-before-{{ picker_id }}">Margem antes (s)</label>
+      <input type="number" class="form-control form-control-sm" name="clip_padding_before_sec"
+             id="clip-before-{{ picker_id }}" min="0" max="60" step="0.5" required
+             value="{{ "%.1f"|format(pipeline_params.clip_padding_before_sec) }}">
+    </div>
+    <div class="col-12 col-lg-4">
+      <label class="form-label small mb-1" for="clip-after-{{ picker_id }}">Margem depois (s)</label>
+      <input type="number" class="form-control form-control-sm" name="clip_padding_after_sec"
+             id="clip-after-{{ picker_id }}" min="0" max="60" step="0.5" required
+             value="{{ "%.1f"|format(pipeline_params.clip_padding_after_sec) }}">
+    </div>
+  </div>
+</div>

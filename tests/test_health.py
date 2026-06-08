@@ -9,5 +9,8 @@ def test_health():
     assert r.status_code == 200
     data = r.json()
     assert data["status"] == "ok"
-    assert "backend" in data
+    assert data["backend"] in ("cpu", "cuda")
+    assert data["mode"] in ("cpu", "gpu")
+    assert data["mode_label"] in ("CPU", "CPU + GPU")
+    assert "detection_summary" in data
     assert "sample_fps" in data

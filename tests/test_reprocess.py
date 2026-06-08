@@ -161,7 +161,8 @@ def test_web_reprocess_batch(tmp_path, monkeypatch):
         )
 
     assert r.status_code == 303
-    assert r.headers["location"].endswith(f"/lotes/{slug}")
+    assert r.headers["location"].startswith(f"/lotes/{slug}")
+    assert "ok=batch_reprocessed" in r.headers["location"]
 
     with database.SessionLocal() as db:
         queued = db.scalars(
