@@ -9,6 +9,7 @@ from analisador_videos.api import batches, events, jobs, process, status, videos
 from analisador_videos.pipeline.compute import health_info
 from analisador_videos.config import settings
 from analisador_videos.db.init_db import create_tables
+from analisador_videos.jobs.recovery import recover_orphaned_jobs_on_startup
 from analisador_videos.web.router import router as web_router
 
 STATIC_DIR = Path(__file__).parent / "web" / "static"
@@ -24,6 +25,7 @@ async def lifespan(app: FastAPI):
     (settings.data_dir / "clips" / "annotated").mkdir(parents=True, exist_ok=True)
     (settings.data_dir / "supercuts" / "annotated").mkdir(parents=True, exist_ok=True)
     create_tables()
+    recover_orphaned_jobs_on_startup()
     yield
 
 

@@ -1,10 +1,18 @@
-from sqlalchemy import select
+from sqlalchemy import select, text
 
 from analisador_videos.config import settings
 from analisador_videos.db import database
 from analisador_videos.db.database import init_engine
 from analisador_videos.db.init_db import create_tables
 from analisador_videos.db.models import Batch, Video
+
+
+def test_sqlite_wal_mode(tmp_path, monkeypatch):
+    monkeypatch.setattr(settings, "data_dir", tmp_path)
+    init_engine()
+    with database.engine.connect() as conn:
+        mode = conn.execute(text("PRAGMA journal_mode")).scalar()
+    assert mode.lower() == "wal"
 
 
 def test_create_video(tmp_path, monkeypatch):

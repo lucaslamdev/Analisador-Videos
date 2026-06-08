@@ -1,5 +1,4 @@
 import asyncio
-from collections import Counter
 from pathlib import Path
 from urllib.parse import quote
 
@@ -40,6 +39,10 @@ from analisador_videos.pipeline.annotate_media import (
 from analisador_videos.pipeline.runner import build_supercut_for_video
 from analisador_videos.reports.batch_builder import build_batch_html
 from analisador_videos.web.event_filters import apply_event_filters, count_active_filters
+from analisador_videos.web.event_queries import (
+    count_events_by_class_label,
+    distinct_event_class_names,
+)
 from analisador_videos.pipeline.compute import health_info
 from analisador_videos.events.delete import delete_event
 from analisador_videos.jobs.detection_params import build_detection_params_json
@@ -222,7 +225,7 @@ def events_page(
     events = db.scalars(q.limit(200)).all()
     videos = db.scalars(select(Video).order_by(Video.filename)).all()
     lotes = db.scalars(select(Batch).order_by(Batch.created_at.desc())).all()
-    classes = sorted({e.class_name for e in db.scalars(select(Event)).all()})
+    classes = distinct_event_class_names(db)
     video_by_id = {v.id: v for v in videos}
     batch_by_slug = {b.slug: b for b in lotes}
 
@@ -310,10 +313,7 @@ def lote_detail(slug: str, request: Request, db: Session = Depends(get_db)):
             ).all()
         )
     events = sorted(events, key=lambda e: e.start_time_sec, reverse=True)[:48]
-    by_class: Counter = Counter()
-    for v in videos:
-        for e in db.scalars(select(Event).where(Event.video_id == v.id)):
-            by_class[class_label_pt(e.class_name)] += 1
+    by_class = count_events_by_class_label(db, video_ids=[v.id for v in videos])
     batch_jobs = list(
         db.scalars(
             select(Job).where(Job.batch_id == batch.id).order_by(Job.created_at.desc())
