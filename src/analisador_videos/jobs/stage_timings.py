@@ -22,7 +22,7 @@ STAGE_ORDER: tuple[str, ...] = (
     "reports",
 )
 
-RUNTIME_PARAM_KEYS = ("stage_timings_sec", "pipeline_total_sec")
+RUNTIME_PARAM_KEYS = ("stage_timings_sec", "pipeline_total_sec", "artifact_status")
 
 
 def _parse_params(params_json: str | None) -> dict:

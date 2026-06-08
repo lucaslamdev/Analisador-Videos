@@ -96,6 +96,7 @@ def test_strip_runtime_params_removes_timing_keys():
             "sample_fps": 2,
             "stage_timings_sec": {"detect": 1.0},
             "pipeline_total_sec": 1.0,
+            "artifact_status": {"supercut": "ok"},
         }
     )
     assert cleaned == {"sample_fps": 2}

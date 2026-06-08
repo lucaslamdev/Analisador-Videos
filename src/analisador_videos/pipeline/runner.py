@@ -17,6 +17,10 @@ from analisador_videos.jobs.cancel import (
     is_job_cancelled,
 )
 from analisador_videos.jobs.detection_params import detection_settings_for_job
+from analisador_videos.jobs.artifact_status import (
+    ArtifactStatusTracker,
+    persist_artifact_status,
+)
 from analisador_videos.jobs.stage_timings import PipelineStageTimer, persist_stage_timings
 from analisador_videos.util.detection_classes import parse_detection_classes
 from analisador_videos.jobs.progress import update_job
@@ -191,6 +195,7 @@ def _run_pipeline(
     cfg = cfg or detection_settings_for_job(job.params_json)
     job_id = job.id
     timer = PipelineStageTimer()
+    artifact_tracker = ArtifactStatusTracker()
     media_warnings: list[str] = []
 
     try:
@@ -317,6 +322,7 @@ def _run_pipeline(
         total_ev = max(len(events), 1)
 
         with timer.stage("media"):
+            artifact_tracker.mark_media_started()
             for i, event in enumerate(events):
                 ensure_not_cancelled(db, job_id)
                 snap_path = snap_dir / f"video{video.id}_event{event.id}.jpg"
@@ -342,6 +348,7 @@ def _run_pipeline(
                 )
                 event.snapshot_path = sp
                 event.thumbnail_path = tp
+                artifact_tracker.record_snapshot(sp is not None)
                 ss, ts = _assign_snapshot_pair(
                     video_path,
                     event.start_time_raw_sec,
@@ -354,6 +361,7 @@ def _run_pipeline(
                 )
                 event.interval_start_snapshot_path = ss
                 event.interval_start_thumbnail_path = ts
+                artifact_tracker.record_snapshot(ss is not None)
                 end_snap_t = (
                     event.end_time_raw_sec
                     if event.end_time_raw_sec is not None
@@ -371,12 +379,15 @@ def _run_pipeline(
                 )
                 event.interval_end_snapshot_path = se
                 event.interval_end_thumbnail_path = te
+                artifact_tracker.record_snapshot(se is not None)
                 try:
                     extract_clip(
                         video_path, event.start_time_sec, event.end_time_sec, clip_path
                     )
                     event.clip_path = clip_path.as_posix()
+                    artifact_tracker.record_clip(True)
                 except Exception as exc:
+                    artifact_tracker.record_clip(False)
                     media_warnings.append(
                         f"Evento {event.id} (clipe {event.start_time_sec:.2f}s–"
                         f"{event.end_time_sec:.2f}s): {exc}"
@@ -403,20 +414,29 @@ def _run_pipeline(
                         )
                     )
                     db.commit()
+                    artifact_tracker.set_supercut("ok")
                 except Exception as exc:
+                    artifact_tracker.set_supercut("failed")
                     media_warnings.append(f"Supercut: {exc}")
                     logger.warning("Supercut ignorado vídeo %s: %s", video.id, exc)
+        else:
+            artifact_tracker.set_supercut("skipped")
 
         if cfg.generate_reports_on_complete:
             with timer.stage("reports"):
                 update_job(db, job_id, stage="reports", progress_pct=95)
                 try:
                     _write_reports(db, job, video, events)
+                    artifact_tracker.set_reports("ok")
                 except Exception as exc:
+                    artifact_tracker.set_reports("failed")
                     media_warnings.append(f"Relatórios automáticos: {exc}")
                     logger.warning("Relatórios on-complete falharam: %s", exc)
+        else:
+            artifact_tracker.set_reports("skipped")
     finally:
         persist_stage_timings(db, job, timer)
+        persist_artifact_status(db, job, artifact_tracker)
 
     return media_warnings
 

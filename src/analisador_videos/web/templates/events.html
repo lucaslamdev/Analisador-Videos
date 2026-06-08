@@ -9,9 +9,12 @@
     <span class="text-muted small">
       <i class="bi bi-funnel me-1"></i>
       {% if active_filter_count > 0 %}
-        {{ active_filter_count }} filtro(s) ativo(s) · {{ events_count }} evento(s)
+        {{ active_filter_count }} filtro(s) ativo(s) · {{ events_count }} evento(s) no total
       {% else %}
-        Nenhum filtro · até 200 eventos exibidos
+        Nenhum filtro · {{ events_count }} evento(s) no total
+      {% endif %}
+      {% if pagination.total_count > 0 %}
+        · exibindo {{ pagination.range_start }}–{{ pagination.range_end }}
       {% endif %}
     </span>
     <div class="d-flex gap-2">
@@ -165,6 +168,26 @@
   </div>
 {% endfor %}
 </div>
+
+{% if pagination.total_pages > 1 %}
+<nav class="d-flex flex-wrap justify-content-between align-items-center gap-2 mt-4" aria-label="Paginação de eventos">
+  <span class="text-muted small">
+    Página {{ pagination.page }} de {{ pagination.total_pages }}
+  </span>
+  <div class="btn-group">
+    {% if pagination.has_prev %}
+    <a class="btn btn-sm btn-outline-secondary" href="/events?{{ pagination_prev_query }}">Anterior</a>
+    {% else %}
+    <span class="btn btn-sm btn-outline-secondary disabled" aria-disabled="true">Anterior</span>
+    {% endif %}
+    {% if pagination.has_next %}
+    <a class="btn btn-sm btn-outline-secondary" href="/events?{{ pagination_next_query }}">Próxima</a>
+    {% else %}
+    <span class="btn btn-sm btn-outline-secondary disabled" aria-disabled="true">Próxima</span>
+    {% endif %}
+  </div>
+</nav>
+{% endif %}
 {% else %}
 {{ empty_state("Nenhum evento", "Ajuste os filtros ou processe um vídeo primeiro.", "search") }}
 {% endif %}

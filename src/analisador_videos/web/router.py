@@ -41,8 +41,12 @@ from analisador_videos.pipeline.runner import build_supercut_for_video
 from analisador_videos.reports.batch_builder import build_batch_html
 from analisador_videos.web.event_filters import apply_event_filters, count_active_filters
 from analisador_videos.web.event_queries import (
+    DEFAULT_EVENTS_PAGE_SIZE,
+    build_events_query_string,
     count_events_by_class_label,
+    count_filtered_events,
     distinct_event_class_names,
+    normalize_events_pagination,
 )
 from analisador_videos.pipeline.compute import health_info
 from analisador_videos.events.delete import delete_event
@@ -51,6 +55,7 @@ from analisador_videos.jobs.detection_params import (
     parse_threshold_value,
     thresholds_for_ui,
 )
+from analisador_videos.jobs.artifact_status import artifact_status_for_ui
 from analisador_videos.jobs.stage_timings import (
     pipeline_total_sec_for_ui,
     stage_timings_for_ui,
@@ -127,6 +132,11 @@ def _stage_timings_context(params_json: str | None = None) -> dict:
     if total is not None:
         total_display = f"{total:.1f} s" if total < 60 else format_hms(total)
     return {"stage_timings": rows, "pipeline_total_display": total_display}
+
+
+def _artifact_status_context(params_json: str | None = None) -> dict:
+    rows = artifact_status_for_ui(params_json)
+    return {"artifact_status": rows}
 
 
 def _parse_form_thresholds(
@@ -248,6 +258,7 @@ def job_detail_page(job_id: str, request: Request, db: Session = Depends(get_db)
                 **_class_picker_context(job.params_json),
                 **_threshold_picker_context(job.params_json),
                 **_stage_timings_context(job.params_json),
+                **_artifact_status_context(job.params_json),
             }
         ),
     )
@@ -259,10 +270,20 @@ def events_page(
     video_id: list[int] = Query(default=[]),
     batch: list[str] = Query(default=[]),
     class_name: list[str] = Query(default=[], alias="class"),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=DEFAULT_EVENTS_PAGE_SIZE, ge=1),
     db: Session = Depends(get_db),
 ):
     batch_slugs = [s for s in batch if s]
     class_names = class_name
+
+    total_count = count_filtered_events(
+        db,
+        batch_slugs=batch_slugs,
+        video_ids=video_id,
+        class_names=class_names,
+    )
+    pagination = normalize_events_pagination(page, page_size, total_count)
 
     q = select(Event).order_by(Event.start_time_sec.desc())
     q = apply_event_filters(
@@ -272,7 +293,29 @@ def events_page(
         video_ids=video_id,
         class_names=class_names,
     )
-    events = db.scalars(q.limit(200)).all()
+    events = db.scalars(
+        q.offset(pagination.offset).limit(pagination.page_size)
+    ).all()
+    pagination = normalize_events_pagination(
+        pagination.page,
+        pagination.page_size,
+        total_count,
+        returned_count=len(events),
+    )
+    prev_query = build_events_query_string(
+        page=pagination.page - 1,
+        page_size=pagination.page_size,
+        video_ids=video_id,
+        batch_slugs=batch_slugs,
+        class_names=class_names,
+    )
+    next_query = build_events_query_string(
+        page=pagination.page + 1,
+        page_size=pagination.page_size,
+        video_ids=video_id,
+        batch_slugs=batch_slugs,
+        class_names=class_names,
+    )
     videos = db.scalars(select(Video).order_by(Video.filename)).all()
     lotes = db.scalars(select(Batch).order_by(Batch.created_at.desc())).all()
     classes = distinct_event_class_names(db)
@@ -302,7 +345,10 @@ def events_page(
             {
                 "nav_active": "events",
                 "events": events,
-                "events_count": len(events),
+                "events_count": pagination.total_count,
+                "pagination": pagination,
+                "pagination_prev_query": prev_query,
+                "pagination_next_query": next_query,
                 "videos": videos,
                 "video_by_id": video_by_id,
                 "lotes": lotes,

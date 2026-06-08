@@ -19,6 +19,34 @@
 </div>
 {% endif %}
 
+{% if artifact_status %}
+<div class="card card-app mb-4">
+  <div class="card-header">Artefatos gerados</div>
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-sm table-striped mb-0 align-middle">
+        <thead>
+          <tr>
+            <th>Artefato</th>
+            <th class="text-end">Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in artifact_status %}
+          <tr>
+            <td>{{ row.label }}</td>
+            <td class="text-end">
+              <span class="badge text-bg-{{ row.badge_class }}">{{ row.display }}</span>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endif %}
+
 {% if stage_timings %}
 <div class="card card-app mb-4">
   <div class="card-header">Tempo por etapa</div>
