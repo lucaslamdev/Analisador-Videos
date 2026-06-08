@@ -8,24 +8,24 @@
   {% set ann_dl = ann_view ~ ('&download=1' if sc.class_filter else '?download=1') %}
   {% set ann_s_view = '/videos/' ~ vid ~ '/supercut/annotated' ~ cf_q ~ ('&' if sc.class_filter else '?') ~ 'sensitive=1' %}
   {% set ann_s_dl = ann_s_view ~ '&download=1' %}
-  <div class="{% if not loop.last %}mb-4 pb-4 border-bottom{% endif %}">
+  <div class="{% if not loop.last %}mb-3 pb-3 border-bottom{% endif %}">
     {% if sc.class_filter %}
     <p class="small fw-semibold mb-2">Filtro: {{ sc.class_filter | class_pt }}</p>
     {% else %}
-    <p class="small fw-semibold mb-2">Supercut completo</p>
+    <p class="small fw-semibold mb-2">Compilado completo</p>
     {% endif %}
     <div class="row g-3 mb-2">
       <div class="col-12">
-        {{ video_block('Supercut original', view_url, dl_url) }}
+        {{ video_block('Compilado original', view_url, dl_url) }}
       </div>
       {% if sc.annotated_path %}
       <div class="col-md-6">
-        {{ video_block('Bbox padrão', ann_view, ann_dl) }}
+        {{ video_block('Caixas padrão', ann_view, ann_dl) }}
       </div>
       {% endif %}
       {% if sc.annotated_sensitive_path %}
       <div class="col-md-6">
-        {{ video_block('Bbox sensível', ann_s_view, ann_s_dl) }}
+        {{ video_block('Caixas sensíveis', ann_s_view, ann_s_dl) }}
       </div>
       {% endif %}
     </div>

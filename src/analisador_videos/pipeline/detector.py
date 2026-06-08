@@ -13,6 +13,8 @@ from analisador_videos.pipeline.sampler import (
     vid_stride_for_sample,
 )
 
+PERSON_CLASS = "person"
+
 # Classes de transporte — limiar de confiança mais baixo (vehicle_confidence)
 VEHICLE_CLASSES = frozenset(
     {
@@ -57,9 +59,20 @@ def track_classes_kwargs(
     return {"classes": yolo_track_class_ids(allowed_classes, class_names)}
 
 
+def yolo_conf_floor(settings: Settings) -> float:
+    """Menor limiar ativo — usado como ``conf`` na inferência YOLO."""
+    return min(
+        settings.confidence_threshold,
+        settings.person_confidence,
+        settings.vehicle_confidence,
+    )
+
+
 def _conf_threshold(settings: Settings, class_name: str) -> float:
     if class_name in VEHICLE_CLASSES:
         return settings.vehicle_confidence
+    if class_name == PERSON_CLASS:
+        return settings.person_confidence
     return settings.confidence_threshold
 
 
@@ -285,7 +298,7 @@ def _run_detection_gpu_stream(
         half=profile.yolo_half,
         imgsz=profile.yolo_imgsz,
         verbose=False,
-        conf=min(settings.confidence_threshold, settings.vehicle_confidence),
+        conf=yolo_conf_floor(settings),
         **track_kw,
     )
 

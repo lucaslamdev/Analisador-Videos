@@ -2,12 +2,11 @@
 {% from "macros.html" import page_header, event_times, empty_state, delete_event_button %}
 {% block title %}Eventos — Analisador{% endblock %}
 {% block content %}
-{{ page_header("Galeria de eventos", "Selecione um ou mais lotes, vídeos e classes. Use Ctrl+clique ou Shift+clique nas listas.") }}
+{{ page_header("Galeria de eventos", "Revise os trechos encontrados e filtre por lote, vídeo ou classe.") }}
 
 <form class="filters-bar" method="get" role="search" aria-label="Filtros de eventos" id="events-filter-form">
   <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
     <span class="text-muted small">
-      <i class="bi bi-funnel me-1"></i>
       {% if active_filter_count > 0 %}
         {{ active_filter_count }} filtro(s) ativo(s) · {{ events_count }} evento(s) no total
       {% else %}
@@ -19,7 +18,7 @@
     </span>
     <div class="d-flex gap-2">
       <button type="button" class="btn btn-sm btn-outline-secondary" data-filter-action="clear-all">Limpar tudo</button>
-      <button type="submit" class="btn btn-sm btn-primary"><i class="bi bi-check2 me-1"></i>Aplicar filtros</button>
+      <button type="submit" class="btn btn-sm btn-primary">Aplicar filtros</button>
     </div>
   </div>
 
@@ -92,36 +91,36 @@
 </form>
 
 {% if filters.video_ids|length == 1 %}
-<div class="card card-app mb-4">
-  <div class="card-body d-flex flex-wrap gap-2 align-items-center">
-    <span class="text-muted small me-2">Ferramentas do vídeo selecionado:</span>
+<div class="card card-app mb-3">
+  <div class="card-body toolbar-actions">
+    <span class="text-muted small me-2">Ações para o vídeo selecionado:</span>
     {% set vid = filters.video_ids[0] %}
     <form class="d-flex flex-wrap gap-2" action="/web/supercut/{{ vid }}" method="post">
       <select name="class_name" class="form-select form-select-sm" style="width:auto">
-        <option value="">Supercut completo</option>
+        <option value="">Compilado completo</option>
         {% for c in classes %}
         <option value="{{ c }}">Só {{ c | class_pt }}</option>
         {% endfor %}
       </select>
       <button class="btn btn-sm btn-outline-secondary" type="submit">
-        {% if video_supercuts %}Regenerar supercut{% else %}Gerar supercut{% endif %}
+        {% if video_supercuts %}Regenerar compilado{% else %}Gerar compilado{% endif %}
       </button>
     </form>
     {% if video_supercuts %}
     <form class="d-flex flex-wrap gap-2 align-items-center" action="/web/videos/{{ vid }}/annotate-supercut" method="post">
       <select name="class_name" class="form-select form-select-sm" style="width:auto">
-        <option value="">Supercut completo</option>
+        <option value="">Compilado completo</option>
         {% for c in classes %}
         <option value="{{ c }}">Só {{ c | class_pt }}</option>
         {% endfor %}
       </select>
-      <button class="btn btn-sm btn-outline-secondary" type="submit">Bbox padrão</button>
-      <button class="btn btn-sm btn-outline-warning" type="submit" name="sensitive" value="true">Bbox sensível</button>
+      <button class="btn btn-sm btn-outline-secondary" type="submit">Caixas padrão</button>
+      <button class="btn btn-sm btn-outline-warning" type="submit" name="sensitive" value="true">Caixas sensíveis</button>
     </form>
     {% if parent_job_id %}
     <form class="d-inline" action="/web/jobs/{{ parent_job_id }}/sensitive-v2" method="post"
-          onsubmit="return confirm('Criar job/lote v2 com bbox sensível em todos os clipes e relatórios v2? v1 permanece.');">
-      <button class="btn btn-sm btn-primary" type="submit">Job v2 (sensível)</button>
+          onsubmit="return confirm('Criar uma versão sensível com caixas de detecção em todos os clipes e relatórios? A versão padrão permanece.');">
+      <button class="btn btn-sm btn-primary" type="submit">Versão sensível</button>
     </form>
     {% endif %}
     {% endif %}
@@ -132,13 +131,13 @@
   </div>
   {% if video_supercuts %}
   <div class="card-body border-top pt-3">
-    <p class="small text-muted mb-3">Supercut já gerado — visualize ou baixe abaixo sem precisar gerar de novo.</p>
+    <p class="small text-muted mb-3">Compilado já gerado. Visualize ou baixe abaixo sem precisar gerar novamente.</p>
     {% include "partials/supercut_panel.html" %}
   </div>
   {% endif %}
 </div>
 {% elif filters.video_ids|length > 1 %}
-<p class="text-muted small mb-3">Relatórios e supercut estão disponíveis ao filtrar um único vídeo.</p>
+<p class="text-muted small mb-3">Relatórios e compilado ficam disponíveis ao filtrar um único vídeo.</p>
 {% endif %}
 
 {% if events %}
@@ -154,7 +153,7 @@
       <div class="card-body">
         <span class="badge rounded-pill badge-class mb-2">{{ e.class_name | class_pt }}</span>
         {% if video_by_id.get(e.video_id) %}
-        <p class="small text-truncate mb-2" title="{{ video_by_id[e.video_id].filename }}">{{ video_by_id[e.video_id].filename }}</p>
+        <p class="small cell-filename mb-2" title="{{ video_by_id[e.video_id].filename }}">{{ video_by_id[e.video_id].filename }}</p>
         {% else %}
         <p class="small text-muted mb-2">Vídeo #{{ e.video_id }}</p>
         {% endif %}
@@ -170,7 +169,7 @@
 </div>
 
 {% if pagination.total_pages > 1 %}
-<nav class="d-flex flex-wrap justify-content-between align-items-center gap-2 mt-4" aria-label="Paginação de eventos">
+<nav class="d-flex flex-wrap justify-content-between align-items-center gap-2 mt-3" aria-label="Paginação de eventos">
   <span class="text-muted small">
     Página {{ pagination.page }} de {{ pagination.total_pages }}
   </span>

@@ -6,59 +6,95 @@
 
 {{ page_header("Lote " ~ batch.slug, "Criado em " ~ batch.created_at.strftime("%d/%m/%Y %H:%M")) }}
 
-<div class="card card-app mb-4">
+{% if retry_error %}
+<div class="alert alert-danger" role="alert">{{ retry_error }}</div>
+{% endif %}
+
+<div class="card card-app mb-3">
   <div class="card-header">Ações do lote</div>
   <div class="card-body d-flex flex-wrap gap-2 align-items-center">
     {{ batch_export_buttons(batch) }}
     <span class="vr d-none d-md-inline mx-1"></span>
     {% if active_jobs_count > 0 %}
     <form action="/web/lotes/{{ batch.slug }}/cancel" method="post" class="d-inline"
-          onsubmit="return confirm('Cancelar {{ active_jobs_count }} job(s) ativo(s)?');">
+          onsubmit="return confirm('Cancelar {{ active_jobs_count }} processamento(s) ativo(s)?');">
       <button type="submit" class="btn btn-sm btn-outline-warning">
-        <i class="bi bi-x-octagon me-1"></i>Cancelar lote
+        <i class="bi bi-x-octagon me-1" aria-hidden="true"></i>Cancelar lote
       </button>
     </form>
     {% endif %}
     {% if batch.analysis_version == 1 and not batch_v2 %}
     <form action="/web/lotes/{{ batch.slug }}/sensitive-v2" method="post" class="d-inline"
-          onsubmit="return confirm('Gerar lote v2 com bbox sensível e relatórios v2 para todos os vídeos? v1 permanece.');">
+          onsubmit="return confirm('Gerar uma versão sensível do lote com caixas de detecção e relatórios para todos os vídeos? A versão padrão permanece.');">
       <button type="submit" class="btn btn-sm btn-warning">
-        <i class="bi bi-bounding-box-circles me-1"></i>Lote v2 (sensível)
+        Versão sensível do lote
       </button>
     </form>
     {% endif %}
     {% if batch_v2 %}
-    <a class="btn btn-sm btn-outline-info" href="/lotes/{{ batch_v2.slug }}">Ver lote v2</a>
-    <a class="btn btn-sm btn-outline-primary" href="/lotes/{{ batch.slug }}/reports/v2/html" target="_blank">Relatório v2</a>
+    <a class="btn btn-sm btn-outline-info" href="/lotes/{{ batch_v2.slug }}">Ver versão sensível</a>
+    <a class="btn btn-sm btn-outline-primary" href="/lotes/{{ batch.slug }}/reports/v2/html" target="_blank">Relatório sensível</a>
     {% endif %}
     <form action="/web/lotes/{{ batch.slug }}/delete" method="post" class="d-inline"
-          onsubmit="return confirm('Excluir o lote inteiro com TODOS os vídeos, jobs, fotos, clipes, eventos e relatórios? Esta ação não pode ser desfeita.');">
+          onsubmit="return confirm('Excluir o lote inteiro com todos os vídeos, processamentos, fotos, clipes, eventos e relatórios? Esta ação não pode ser desfeita.');">
       <button type="submit" class="btn btn-sm btn-outline-danger">
-        <i class="bi bi-trash me-1"></i>Excluir lote
+        Excluir lote
       </button>
     </form>
     <a class="btn btn-sm btn-outline-secondary" href="/events?batch={{ batch.slug }}">
-      <i class="bi bi-grid me-1"></i>Eventos do lote
+      Eventos do lote
     </a>
   </div>
+  {% if reprocessable_jobs_count > 0 and active_jobs_count == 0 %}
+  <div class="card-body border-top pt-3">
+    <p class="small fw-semibold mb-2">
+      Reprocessar lote ({{ reprocessable_jobs_count }} vídeo{{ "s" if reprocessable_jobs_count != 1 else "" }})
+    </p>
+    <p class="text-muted small mb-3">
+      Cria um novo processamento para cada vídeo concluído, com falha ou cancelado, mantendo o lote.
+    </p>
+    <form action="/web/lotes/{{ batch.slug }}/reprocess" method="post">
+      <input type="hidden" name="use_class_picker" value="1">
+      {% set picker_id = "batch-reprocess" %}
+      {% include "partials/detection_thresholds.html" %}
+      {% include "partials/detection_class_picker.html" %}
+      <div class="d-flex flex-wrap gap-2">
+        <button type="submit" name="sensitive" value="0" class="btn btn-sm btn-outline-primary"
+                onclick="return confirm('Reprocessar todos os vídeos elegíveis com detecção padrão? Mídia e eventos anteriores serão substituídos.');">
+          <i class="bi bi-arrow-clockwise me-1" aria-hidden="true"></i>Reprocessar lote
+        </button>
+        <button type="submit" name="sensitive" value="1" class="btn btn-sm btn-outline-warning"
+                onclick="return confirm('Reprocessar o lote com detecção sensível? Pode gerar mais falsos positivos.');">
+          <i class="bi bi-eye me-1" aria-hidden="true"></i>Reprocessar sensível
+        </button>
+      </div>
+    </form>
+  </div>
+  {% elif reprocessable_jobs_count > 0 and active_jobs_count > 0 %}
+  <div class="card-body border-top pt-3">
+    <p class="text-muted small mb-0">
+      Para reprocessar o lote, aguarde ou cancele os {{ active_jobs_count }} processamento(s) ativo(s).
+    </p>
+  </div>
+  {% endif %}
 </div>
 
-<h2 class="section-title">Jobs do lote ({{ batch_jobs|length }})</h2>
+<h2 class="section-title">Processamentos do lote ({{ batch_jobs|length }})</h2>
 {% if batch_jobs %}
-<div class="table-responsive mb-4">
-  <table id="batch-jobs-table" class="table table-app table-hover table-sm mb-0"
+<div class="table-responsive mb-3">
+  <table id="batch-jobs-table" class="table table-app table-hover table-sm table-wide table-processamentos mb-0"
          data-batch-slug="{{ batch.slug }}">
     <thead>
       <tr>
-        <th>Job</th><th>Vídeo</th><th>Status</th><th>Progresso</th>
-        <th>Exportar</th><th>Ações</th>
+        <th>Processamento</th><th>Vídeo</th><th>Status</th><th>Progresso</th>
+        <th>Exportar</th><th class="col-actions">Ações</th>
       </tr>
     </thead>
     <tbody>
     {% for job in batch_jobs %}
       <tr data-job-id="{{ job.id }}">
         <td><a href="/jobs/{{ job.id }}"><code>{{ job.id[:8] }}…</code></a></td>
-        <td class="text-truncate" style="max-width:12rem">
+        <td class="cell-filename">
           {% if video_by_id.get(job.video_id) %}{{ video_by_id[job.video_id].filename }}{% else %}#{{ job.video_id }}{% endif %}
         </td>
         <td class="job-status-cell">{{ status_badge(job.status) }}</td>
@@ -67,10 +103,10 @@
           {% if job.frames_total %} ({{ job.frames_done or 0 }}/{{ job.frames_total }}){% endif %}
         </td>
         <td>{{ job_export_buttons(job) }}</td>
-        <td class="text-nowrap">
-          {{ reprocess_job_buttons(job, compact=true) }}
-          {{ cancel_job_button(job, compact=true) }}
-          {{ delete_job_button(job, compact=true) }}
+        <td class="actions-cell">
+          {{ reprocess_job_buttons(job) }}
+          {{ cancel_job_button(job) }}
+          {{ delete_job_button(job) }}
         </td>
       </tr>
     {% endfor %}
@@ -78,10 +114,10 @@
   </table>
 </div>
 {% else %}
-<p class="text-muted mb-4">Nenhum job neste lote.</p>
+<p class="text-muted mb-3">Nenhum processamento neste lote.</p>
 {% endif %}
 
-<div class="row g-4 mb-4">
+<div class="row g-4 mb-3">
   <div class="col-lg-8">
     <h2 class="section-title">Vídeos ({{ videos|length }})</h2>
     {% if videos %}
@@ -92,7 +128,7 @@
         {% for v in videos %}
           <tr>
             <td>{{ v.id }}</td>
-            <td class="text-truncate" style="max-width:16rem">{{ v.filename }}</td>
+            <td class="cell-filename">{{ v.filename }}</td>
             <td class="font-monospace small">{% if v.duration_sec %}{{ v.duration_sec | hms }}{% else %}—{% endif %}</td>
             <td>{{ status_badge(v.status) }}</td>
             <td><a href="/events?video_id={{ v.id }}" class="btn btn-sm btn-outline-primary">Eventos</a></td>
@@ -111,7 +147,7 @@
     <ul class="list-group list-group-app">
       {% for cls, count in by_class.items() %}
       <li class="list-group-item d-flex justify-content-between align-items-center">
-        <span>{{ cls }}</span>
+        <span>{{ cls | class_pt }}</span>
         <span class="badge rounded-pill badge-class">{{ count }}</span>
       </li>
       {% endfor %}
@@ -133,7 +169,7 @@
         <img src="/media/{{ e.thumbnail_path }}" class="card-img-top" alt="{{ e.class_name | class_pt }}">
       </a>
       {% endif %}
-      <div class="card-body p-2">
+      <div class="card-body p-3">
         <span class="badge rounded-pill badge-class">{{ e.class_name | class_pt }}</span>
         <div class="mt-2">{{ event_times(e) }}</div>
         <a href="/events/{{ e.id }}" class="stretched-link" aria-label="Evento {{ e.id }}"></a>
@@ -148,6 +184,9 @@
 {% endblock %}
 
 {% block scripts %}
+{% if reprocessable_jobs_count > 0 %}
+<script src="/static/detection-classes.js"></script>
+{% endif %}
 {% if active_jobs_count > 0 %}
 <script src="/static/batch-progress.js"></script>
 {% endif %}

@@ -58,6 +58,9 @@ async def reprocess_job_endpoint(
     confidence_threshold: float | None = Query(
         None, ge=0.01, le=1.0, description="Limiar geral de confiança"
     ),
+    person_confidence: float | None = Query(
+        None, ge=0.01, le=1.0, description="Limiar de confiança para pessoas"
+    ),
     vehicle_confidence: float | None = Query(
         None, ge=0.01, le=1.0, description="Limiar de confiança para veículos"
     ),
@@ -73,6 +76,7 @@ async def reprocess_job_endpoint(
             keep_batch=keep_batch,
             detection_classes=classes,
             confidence_threshold=confidence_threshold,
+            person_confidence=person_confidence,
             vehicle_confidence=vehicle_confidence,
         )
     except ValueError as exc:

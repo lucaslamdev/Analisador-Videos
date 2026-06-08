@@ -25,6 +25,7 @@ def job_params_snapshot() -> str:
             "device_used": info["backend"],
             "gpu_name": info.get("device_name"),
             "confidence_threshold": settings.confidence_threshold,
+            "person_confidence": settings.person_confidence,
             "vehicle_confidence": settings.vehicle_confidence,
             "yolo_batch_size": profile.yolo_batch_size,
         }

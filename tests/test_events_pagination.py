@@ -53,4 +53,4 @@ def test_events_page_pagination_web(tmp_path, monkeypatch):
     assert "page=2" in page1.text
     assert "Anterior" in page2.text
     assert "Próxima" in page2.text
-    assert "Ferramentas do vídeo selecionado" in tools.text
+    assert "Ações para o vídeo selecionado" in tools.text

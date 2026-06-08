@@ -10,6 +10,20 @@ THRESHOLD_MIN = 0.01
 THRESHOLD_MAX = 1.0
 
 
+def _threshold_defaults_for_mode(mode: str) -> dict[str, float]:
+    if mode == "sensitive":
+        return {
+            "confidence_threshold": settings.annotate_sensitive_confidence,
+            "person_confidence": settings.annotate_sensitive_person_confidence,
+            "vehicle_confidence": settings.annotate_sensitive_vehicle_confidence,
+        }
+    return {
+        "confidence_threshold": settings.confidence_threshold,
+        "person_confidence": settings.person_confidence,
+        "vehicle_confidence": settings.vehicle_confidence,
+    }
+
+
 def thresholds_for_ui(params_json: str | None = None) -> dict[str, float]:
     """Valores padrão para inputs de limiar na UI."""
     if params_json:
@@ -19,33 +33,28 @@ def thresholds_for_ui(params_json: str | None = None) -> dict[str, float]:
             params = {}
         else:
             mode = params.get("detection_mode", "standard")
+            defaults = _threshold_defaults_for_mode(mode)
             ct = params.get("confidence_threshold")
+            pc = params.get("person_confidence")
             vc = params.get("vehicle_confidence")
-            if ct is not None or vc is not None:
+            if ct is not None or pc is not None or vc is not None:
+                conf = float(ct if ct is not None else defaults["confidence_threshold"])
+                if pc is not None:
+                    person = float(pc)
+                elif "person_confidence" in params:
+                    person = defaults["person_confidence"]
+                elif "confidence_threshold" in params:
+                    person = conf
+                else:
+                    person = defaults["person_confidence"]
                 return {
-                    "confidence_threshold": float(
-                        ct
-                        if ct is not None
-                        else (
-                            settings.annotate_sensitive_confidence
-                            if mode == "sensitive"
-                            else settings.confidence_threshold
-                        )
-                    ),
+                    "confidence_threshold": conf,
+                    "person_confidence": person,
                     "vehicle_confidence": float(
-                        vc
-                        if vc is not None
-                        else (
-                            settings.annotate_sensitive_vehicle_confidence
-                            if mode == "sensitive"
-                            else settings.vehicle_confidence
-                        )
+                        vc if vc is not None else defaults["vehicle_confidence"]
                     ),
                 }
-    return {
-        "confidence_threshold": settings.confidence_threshold,
-        "vehicle_confidence": settings.vehicle_confidence,
-    }
+    return _threshold_defaults_for_mode("standard")
 
 
 def parse_threshold_value(raw: str | float | None, *, field: str) -> float:
@@ -67,18 +76,20 @@ def build_detection_params_json(
     sensitive: bool = False,
     detection_classes: list[str] | None = None,
     confidence_threshold: float | None = None,
+    person_confidence: float | None = None,
     vehicle_confidence: float | None = None,
 ) -> str:
     """
     Monta params_json do job.
 
     Precedência dos limiares:
-    - Valores explícitos (`confidence_threshold` / `vehicle_confidence`) vencem
-      os padrões do modo sensível ou standard.
+    - Valores explícitos vencem os padrões do modo sensível ou standard.
     - Sem valor explícito e `sensitive=True`: usa limiares sensíveis globais.
     - Sem valor explícito e `sensitive=False`: mantém base_params ou padrão global.
     """
     params = strip_runtime_params(dict(base_params or {}))
+    if "confidence_threshold" in params and "person_confidence" not in params:
+        params["person_confidence"] = params["confidence_threshold"]
     params.update(
         {
             "event_merge_gap_sec": settings.event_merge_gap_sec,
@@ -87,16 +98,21 @@ def build_detection_params_json(
             "device": settings.device,
         }
     )
+    mode_defaults = _threshold_defaults_for_mode("sensitive" if sensitive else "standard")
     if sensitive:
         params["detection_mode"] = "sensitive"
-        params["confidence_threshold"] = settings.annotate_sensitive_confidence
-        params["vehicle_confidence"] = settings.annotate_sensitive_vehicle_confidence
+        params["confidence_threshold"] = mode_defaults["confidence_threshold"]
+        params["person_confidence"] = mode_defaults["person_confidence"]
+        params["vehicle_confidence"] = mode_defaults["vehicle_confidence"]
     else:
         params.setdefault("detection_mode", "standard")
-        params.setdefault("confidence_threshold", settings.confidence_threshold)
-        params.setdefault("vehicle_confidence", settings.vehicle_confidence)
+        params.setdefault("confidence_threshold", mode_defaults["confidence_threshold"])
+        params.setdefault("person_confidence", mode_defaults["person_confidence"])
+        params.setdefault("vehicle_confidence", mode_defaults["vehicle_confidence"])
     if confidence_threshold is not None:
         params["confidence_threshold"] = confidence_threshold
+    if person_confidence is not None:
+        params["person_confidence"] = person_confidence
     if vehicle_confidence is not None:
         params["vehicle_confidence"] = vehicle_confidence
     if detection_classes is not None:
@@ -117,16 +133,28 @@ def detection_settings_for_job(params_json: str | None) -> Settings:
     except json.JSONDecodeError:
         return settings
 
-    overrides: dict = {}
     mode = params.get("detection_mode", "standard")
+    mode_defaults = _threshold_defaults_for_mode(mode)
+    overrides: dict = {}
+
     if "confidence_threshold" in params:
         overrides["confidence_threshold"] = float(params["confidence_threshold"])
     elif mode == "sensitive":
-        overrides["confidence_threshold"] = settings.annotate_sensitive_confidence
+        overrides["confidence_threshold"] = mode_defaults["confidence_threshold"]
+
+    if "person_confidence" in params:
+        overrides["person_confidence"] = float(params["person_confidence"])
+    elif mode == "sensitive":
+        overrides["person_confidence"] = mode_defaults["person_confidence"]
+    elif "confidence_threshold" in params and "person_confidence" not in params:
+        # Jobs antigos sem person_confidence: pessoas seguiam o limiar geral.
+        overrides["person_confidence"] = float(params["confidence_threshold"])
+
     if "vehicle_confidence" in params:
         overrides["vehicle_confidence"] = float(params["vehicle_confidence"])
     elif mode == "sensitive":
-        overrides["vehicle_confidence"] = settings.annotate_sensitive_vehicle_confidence
+        overrides["vehicle_confidence"] = mode_defaults["vehicle_confidence"]
+
     for key in ("sample_fps", "event_merge_gap_sec", "clip_padding_sec"):
         if key in params:
             overrides[key] = params[key]

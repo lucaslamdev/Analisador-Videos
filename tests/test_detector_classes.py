@@ -33,6 +33,7 @@ class _Result:
 
 class _Settings:
     confidence_threshold = 0.5
+    person_confidence = 0.5
     vehicle_confidence = 0.35
 
 

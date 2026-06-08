@@ -14,8 +14,10 @@ class Settings(BaseSettings):
     clip_padding_sec: float = 2.0
     device: str = "auto"
     confidence_threshold: float = 0.5
+    person_confidence: float = 0.45
     vehicle_confidence: float = 0.35
     annotate_sensitive_confidence: float = 0.22
+    annotate_sensitive_person_confidence: float = 0.25
     annotate_sensitive_vehicle_confidence: float = 0.18
     annotate_sensitive_iou: float = 0.4
     pdf_max_thumbnails: int = 20

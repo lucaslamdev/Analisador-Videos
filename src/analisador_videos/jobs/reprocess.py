@@ -6,7 +6,7 @@ from pathlib import Path
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from analisador_videos.db.models import Job, Video
+from analisador_videos.db.models import Batch, Job, Video
 from analisador_videos.jobs.delete import (
     _cleanup_video_artifacts_and_tracks,
     _cleanup_video_media_files,
@@ -35,6 +35,7 @@ def create_reprocess_job(
     keep_batch: bool = True,
     detection_classes: list[str] | None = None,
     confidence_threshold: float | None = None,
+    person_confidence: float | None = None,
     vehicle_confidence: float | None = None,
 ) -> Job:
     """
@@ -81,6 +82,7 @@ def create_reprocess_job(
         sensitive=sensitive,
         detection_classes=detection_classes,
         confidence_threshold=confidence_threshold,
+        person_confidence=person_confidence,
         vehicle_confidence=vehicle_confidence,
     )
     params = json.loads(params_json)
@@ -94,6 +96,66 @@ def create_reprocess_job(
         params_json=params_json,
         parent_job_id=parent.id,
     )
+
+
+def latest_reprocessable_jobs_in_batch(jobs: list[Job]) -> list[Job]:
+    """Último processamento por vídeo elegível a reprocessamento."""
+    seen: set[int] = set()
+    result: list[Job] = []
+    for job in jobs:
+        if job.video_id in seen:
+            continue
+        seen.add(job.video_id)
+        if job.status in ("done", "failed", "cancelled"):
+            result.append(job)
+    return result
+
+
+def create_batch_reprocess_jobs(
+    db: Session,
+    batch: Batch,
+    *,
+    sensitive: bool = False,
+    detection_classes: list[str] | None = None,
+    confidence_threshold: float | None = None,
+    person_confidence: float | None = None,
+    vehicle_confidence: float | None = None,
+) -> list[Job]:
+    """Reprocessa o último job elegível de cada vídeo do lote."""
+    jobs = list(
+        db.scalars(
+            select(Job)
+            .where(Job.batch_id == batch.id)
+            .order_by(Job.created_at.desc())
+        )
+    )
+    parents = latest_reprocessable_jobs_in_batch(jobs)
+    if not parents:
+        raise ValueError("Nenhum vídeo do lote pode ser reprocessado agora")
+
+    created: list[Job] = []
+    for parent in parents:
+        try:
+            new_job = create_reprocess_job(
+                db,
+                parent.id,
+                sensitive=sensitive,
+                keep_batch=True,
+                detection_classes=detection_classes,
+                confidence_threshold=confidence_threshold,
+                person_confidence=person_confidence,
+                vehicle_confidence=vehicle_confidence,
+            )
+            created.append(new_job)
+        except ValueError:
+            continue
+
+    if not created:
+        raise ValueError(
+            "Nenhum vídeo pôde ser reprocessado. "
+            "Aguarde processamentos ativos ou cancele-os."
+        )
+    return created
 
 
 def create_retry_job(db: Session, job_id: str) -> Job:

@@ -46,12 +46,14 @@ def test_draw_detections_multiple_classes_and_instances():
 def test_sensitive_mode_keeps_lower_confidence_person():
     settings = Settings(
         confidence_threshold=0.5,
+        person_confidence=0.5,
         annotate_sensitive_confidence=0.22,
+        annotate_sensitive_person_confidence=0.22,
     )
     std = AnnotateOptions(sensitive=False)
     sen = AnnotateOptions(sensitive=True)
-    assert confidence_for_mode(settings, "person", std) == 0.5
-    assert confidence_for_mode(settings, "person", sen) == 0.22
+    assert confidence_for_mode(settings, "person", std) == settings.person_confidence
+    assert confidence_for_mode(settings, "person", sen) == settings.annotate_sensitive_person_confidence
 
     class_names = {0: "person"}
     frame = np.zeros((80, 80, 3), dtype=np.uint8)

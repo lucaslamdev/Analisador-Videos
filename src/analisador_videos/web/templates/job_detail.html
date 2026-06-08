@@ -1,30 +1,30 @@
 {% extends "base.html" %}
-{% from "macros.html" import breadcrumb, page_header, status_badge, progress_bar, stage_badge, cancel_job_button, delete_job_button, job_error_detail, job_export_buttons %}
-{% block title %}Job {{ job.id[:8] }}… — Analisador{% endblock %}
+{% from "macros.html" import breadcrumb, page_header, status_badge, progress_bar, stage_badge, artifact_badge, cancel_job_button, delete_job_button, job_error_detail, job_export_buttons %}
+{% block title %}Processamento {{ job.id[:8] }}… — Analisador{% endblock %}
 {% block content %}
-{{ breadcrumb([("Início", "/"), ("Jobs", "/jobs"), (job.id[:8] ~ "…", None)]) }}
+{{ breadcrumb([("Início", "/"), ("Processamentos", "/jobs"), (job.id[:8] ~ "…", None)]) }}
 
-{{ page_header("Job " ~ job.id[:8] ~ "…", video.filename if video else "Vídeo #" ~ job.video_id) }}
+{{ page_header("Processamento " ~ job.id[:8] ~ "…", video.filename if video else "Vídeo #" ~ job.video_id) }}
 
 {% if retry_error %}
 <div class="alert alert-danger" role="alert">{{ retry_error }}</div>
 {% endif %}
 
 {% if job.error_message %}
-<div class="card card-app mb-4 border-{{ 'warning' if job.status == 'done' else 'danger' }}">
+<div class="card card-app mb-3 border-{{ 'warning' if job.status == 'done' else 'danger' }}">
   <div class="card-header">
-    {% if job.status == 'done' %}Avisos do processamento{% else %}Erro do job{% endif %}
+    {% if job.status == 'done' %}Avisos do processamento{% else %}Erro do processamento{% endif %}
   </div>
   <div class="card-body">{{ job_error_detail(job) }}</div>
 </div>
 {% endif %}
 
 {% if artifact_status %}
-<div class="card card-app mb-4">
+<div class="card card-app mb-3">
   <div class="card-header">Artefatos gerados</div>
   <div class="card-body p-0">
     <div class="table-responsive">
-      <table class="table table-sm table-striped mb-0 align-middle">
+      <table class="table table-app table-hover table-sm mb-0 align-middle">
         <thead>
           <tr>
             <th>Artefato</th>
@@ -36,7 +36,7 @@
           <tr>
             <td>{{ row.label }}</td>
             <td class="text-end">
-              <span class="badge text-bg-{{ row.badge_class }}">{{ row.display }}</span>
+              {{ artifact_badge(row.badge_class, row.display) }}
             </td>
           </tr>
           {% endfor %}
@@ -48,11 +48,11 @@
 {% endif %}
 
 {% if stage_timings %}
-<div class="card card-app mb-4">
+<div class="card card-app mb-3">
   <div class="card-header">Tempo por etapa</div>
   <div class="card-body p-0">
     <div class="table-responsive">
-      <table class="table table-sm table-striped mb-0 align-middle">
+      <table class="table table-app table-hover table-sm mb-0 align-middle">
         <thead>
           <tr>
             <th>Etapa</th>
@@ -67,7 +67,7 @@
           </tr>
           {% endfor %}
           {% if pipeline_total_display %}
-          <tr class="table-light fw-semibold">
+          <tr class="table-app-summary fw-semibold">
             <td>Total do pipeline</td>
             <td class="text-end font-monospace small">{{ pipeline_total_display }}</td>
           </tr>
@@ -86,14 +86,14 @@
       <div class="card-body">
         <ul class="meta-list">
           <li><span class="meta-label">Status</span><span class="meta-value">{{ status_badge(job.status) }}</span></li>
-          <li><span class="meta-label">Versão</span><span class="meta-value">v{{ job.analysis_version or 1 }}</span></li>
+          <li><span class="meta-label">Versão</span><span class="meta-value">{{ 'Sensível' if job.analysis_version == 2 else 'Padrão' }}</span></li>
           <li><span class="meta-label">Etapa</span><span class="meta-value">{{ stage_badge(job.stage) }}</span></li>
           <li><span class="meta-label">Progresso</span><span class="meta-value">{{ job.progress_pct }}%</span></li>
           {% if batch %}
           <li><span class="meta-label">Lote</span><span class="meta-value"><a href="/lotes/{{ batch.slug }}">{{ batch.slug }}</a></span></li>
           {% endif %}
           {% if job_v2 %}
-          <li><span class="meta-label">Job v2</span><span class="meta-value"><a href="/jobs/{{ job_v2.id }}"><code>{{ job_v2.id[:8] }}…</code></a></span></li>
+          <li><span class="meta-label">Versão sensível</span><span class="meta-value"><a href="/jobs/{{ job_v2.id }}"><code>{{ job_v2.id[:8] }}…</code></a></span></li>
           {% endif %}
         </ul>
         <div class="mt-3">{{ progress_bar(job.progress_pct) }}</div>
@@ -106,15 +106,15 @@
       <div class="card-body">
         <div class="d-flex flex-wrap gap-2 mb-3">
           {% if video %}
-          <a href="/events?video_id={{ video.id }}" class="btn btn-primary"><i class="bi bi-grid me-1"></i>Ver eventos</a>
+          <a href="/events?video_id={{ video.id }}" class="btn btn-primary">Ver eventos</a>
           {% endif %}
-          <a href="/jobs" class="btn btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Voltar</a>
+          <a href="/jobs" class="btn btn-outline-secondary">Voltar</a>
           {{ cancel_job_button(job) }}
           {{ delete_job_button(job) }}
         </div>
         {% if job.status in ('done', 'failed', 'cancelled') %}
-        <div class="border rounded p-3 mb-3 bg-light-subtle">
-          <p class="small fw-semibold mb-2"><i class="bi bi-sliders me-1"></i>Reprocessar este vídeo</p>
+        <div class="border rounded p-3 mb-3 panel-subtle">
+          <p class="small fw-semibold mb-2">Reprocessar este vídeo</p>
           <form action="/web/jobs/{{ job.id }}/reprocess" method="post">
             <input type="hidden" name="use_class_picker" value="1">
             {% set picker_id = "reprocess" %}
@@ -129,11 +129,11 @@
             <div class="d-flex flex-wrap gap-2">
               <button type="submit" name="sensitive" value="0" class="btn btn-sm btn-outline-primary"
                       onclick="return confirm('Reprocessar com detecção padrão? Mídia e eventos anteriores serão substituídos.');">
-                <i class="bi bi-arrow-clockwise me-1"></i>Reprocessar
+                Reprocessar
               </button>
               <button type="submit" name="sensitive" value="1" class="btn btn-sm btn-outline-warning"
                       onclick="return confirm('Reprocessar com detecção sensível? Pode gerar mais falsos positivos.');">
-                <i class="bi bi-eye me-1"></i>Reprocessar sensível
+                Reprocessar com mais sensibilidade
               </button>
             </div>
           </form>
@@ -141,32 +141,32 @@
         {% endif %}
         {% if job.status == 'done' and event_count == 0 %}
         <div class="alert alert-info py-2 small mb-3">
-          <i class="bi bi-info-circle me-1"></i>Nenhum evento detectado. Tente <strong>Reprocessar sensível</strong> se esperava detecções.
+          <i class="bi bi-info-circle me-1" aria-hidden="true"></i>Nenhum evento detectado. Tente <strong>Reprocessar sensível</strong> se esperava detecções.
         </div>
         {% endif %}
         {% if job.status == 'done' and job.analysis_version == 1 and not job_v2 %}
         <form class="mb-3" action="/web/jobs/{{ job.id }}/sensitive-v2" method="post"
-              onsubmit="return confirm('Gerar job v2: bbox sensível em todos os clipes/supercuts + relatórios v2? O job v1 e relatórios v1 permanecem.');">
+              onsubmit="return confirm('Gerar uma versão sensível com caixas de detecção em clipes, compilados e relatórios? A versão padrão permanece.');">
           <button type="submit" class="btn btn-warning">
-            <i class="bi bi-bounding-box-circles me-1"></i>Gerar job v2 (bbox sensível)
+            Gerar versão sensível
           </button>
         </form>
         {% endif %}
         {% if job.status == 'done' %}
-        <p class="small text-muted mb-2">Relatórios v1:</p>
+        <p class="small text-muted mb-2">Relatórios da versão padrão:</p>
         {{ job_export_buttons(job) }}
         {% if job_v2 %}
-        <p class="small text-muted mb-2 mt-3">Relatórios v2 (sensível):</p>
-        <div class="btn-group btn-group-sm flex-wrap">
-          <a class="btn btn-outline-primary btn-sm" href="/videos/{{ video.id }}/reports/v2/html" target="_blank">HTML v2</a>
-          <a class="btn btn-outline-primary btn-sm" href="/videos/{{ video.id }}/reports/v2/pdf">PDF v2</a>
-          <a class="btn btn-outline-secondary btn-sm" href="/videos/{{ video.id }}/reports/v2/pdf-compact">PDF v2 compacto</a>
-          <a class="btn btn-outline-primary btn-sm" href="/videos/{{ video.id }}/reports/v2/json">JSON v2</a>
+        <p class="small text-muted mb-2 mt-3">Relatórios da versão sensível:</p>
+        <div class="export-actions">
+          <a class="btn btn-outline-primary btn-sm" href="/videos/{{ video.id }}/reports/v2/html" target="_blank">HTML sensível</a>
+          <a class="btn btn-outline-primary btn-sm" href="/videos/{{ video.id }}/reports/v2/pdf">PDF sensível</a>
+          <a class="btn btn-outline-secondary btn-sm" href="/videos/{{ video.id }}/reports/v2/pdf-compact">PDF compacto</a>
+          <a class="btn btn-outline-primary btn-sm" href="/videos/{{ video.id }}/reports/v2/json">JSON sensível</a>
         </div>
         {% endif %}
         {% if video and video_supercuts %}
-        <div class="mt-4 pt-3 border-top">
-          <p class="small text-muted mb-2">Supercuts</p>
+        <div class="mt-3 pt-3 border-top">
+          <p class="small text-muted mb-2">Compilados</p>
           {% set video_id = video.id %}
           {% include "partials/supercut_panel.html" %}
         </div>

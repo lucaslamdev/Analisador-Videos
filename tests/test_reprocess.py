@@ -14,7 +14,11 @@ from analisador_videos.jobs.detection_params import (
     build_detection_params_json,
     detection_settings_for_job,
 )
-from analisador_videos.jobs.reprocess import create_reprocess_job, create_retry_job
+from analisador_videos.jobs.reprocess import (
+    create_batch_reprocess_jobs,
+    create_reprocess_job,
+    create_retry_job,
+)
 from analisador_videos.main import app
 
 
@@ -55,6 +59,7 @@ def test_detection_settings_sensitive(tmp_path, monkeypatch):
     params = build_detection_params_json(sensitive=True)
     cfg = detection_settings_for_job(params)
     assert cfg.confidence_threshold == settings.annotate_sensitive_confidence
+    assert cfg.person_confidence == settings.annotate_sensitive_person_confidence
     assert cfg.vehicle_confidence == settings.annotate_sensitive_vehicle_confidence
 
 
@@ -101,6 +106,68 @@ def test_web_reprocess_keep_batch_zero_clears_batch(tmp_path, monkeypatch):
         new_job = db.get(Job, new_job_id)
         assert new_job is not None
         assert new_job.batch_id is None
+
+
+def test_create_batch_reprocess_jobs(tmp_path, monkeypatch):
+    _setup_db(tmp_path, monkeypatch)
+    with database.SessionLocal() as db:
+        batch, _slug = next_batch_slug(db)
+        video1, _parent1 = _video_and_job(db, tmp_path, status="done", batch_id=batch.id)
+        video_path = tmp_path / "clip2.mp4"
+        video_path.write_bytes(b"fake2")
+        video2 = Video(
+            filename="clip2.mp4",
+            path=str(video_path),
+            sha256="def",
+            batch_id=batch.id,
+            status="done",
+        )
+        db.add(video2)
+        db.commit()
+        db.refresh(video2)
+        job2 = Job(
+            id="parent-job-2",
+            video_id=video2.id,
+            batch_id=batch.id,
+            status="done",
+            progress_pct=100,
+            params_json=build_detection_params_json(),
+        )
+        db.add(job2)
+        db.commit()
+
+        new_jobs = create_batch_reprocess_jobs(db, batch, sensitive=False)
+        assert len(new_jobs) == 2
+        assert {j.video_id for j in new_jobs} == {video1.id, video2.id}
+
+
+def test_web_reprocess_batch(tmp_path, monkeypatch):
+    _setup_db(tmp_path, monkeypatch)
+    with database.SessionLocal() as db:
+        batch, slug = next_batch_slug(db)
+        batch_id = batch.id
+        _video_and_job(db, tmp_path, status="done", batch_id=batch_id)
+
+    async def noop_run_async(job_id: str) -> None:
+        pass
+
+    monkeypatch.setattr("analisador_videos.web.router.run_async", noop_run_async)
+
+    with TestClient(app) as client:
+        r = client.post(
+            f"/web/lotes/{slug}/reprocess",
+            data={"sensitive": "0", "use_class_picker": "1", "detection_classes": ["person"]},
+            follow_redirects=False,
+        )
+
+    assert r.status_code == 303
+    assert r.headers["location"].endswith(f"/lotes/{slug}")
+
+    with database.SessionLocal() as db:
+        queued = db.scalars(
+            select(Job).where(Job.batch_id == batch_id, Job.status == "queued")
+        ).all()
+        assert len(queued) == 1
 
 
 def test_create_reprocess_job_outside_batch(tmp_path, monkeypatch):

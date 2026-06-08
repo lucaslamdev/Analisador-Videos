@@ -14,16 +14,20 @@
 
 {% macro stage_badge(stage) %}
 {% if stage %}
-<span class="badge rounded-pill text-bg-light border">{{ stage | stage_pt }}</span>
+<span class="badge rounded-pill badge-stage">{{ stage | stage_pt }}</span>
 {% else %}
 <span class="text-muted">—</span>
 {% endif %}
 {% endmacro %}
 
+{% macro artifact_badge(badge_class, label) %}
+<span class="badge rounded-pill badge-artifact badge-artifact-{{ badge_class }}">{{ label }}</span>
+{% endmacro %}
+
 {% macro progress_bar(pct, label=None) %}
 <div class="progress progress-app" role="progressbar"
      aria-valuenow="{{ pct }}" aria-valuemin="0" aria-valuemax="100"
-     aria-label="{{ label or 'Progresso do job' }}">
+     aria-label="{{ label or 'Progresso do processamento' }}">
   <div class="progress-bar" style="width: {{ pct }}%">{{ pct }}%</div>
 </div>
 {% endmacro %}
@@ -55,8 +59,8 @@
 {% macro cancel_job_button(job, compact=false) %}
 {% if job.status in ('queued', 'running') %}
 <form action="/web/jobs/{{ job.id }}/cancel" method="post" class="d-inline"
-      onsubmit="return confirm('Cancelar este job? O processamento será interrompido.');">
-  <button type="submit" class="btn btn-sm btn-outline-warning" title="Cancelar job">
+      onsubmit="return confirm('Cancelar este processamento? A análise será interrompida.');">
+  <button type="submit" class="btn btn-sm btn-outline-warning" title="Cancelar processamento">
     <i class="bi bi-x-circle{% if not compact %} me-1{% endif %}" aria-hidden="true"></i>{% if not compact %}Cancelar{% endif %}
   </button>
 </form>
@@ -69,7 +73,7 @@
 
 {% macro reprocess_job_buttons(job, compact=false) %}
 {% if job.status in ('done', 'failed', 'cancelled') %}
-{% set avulso_hint = 'Para reprocessar fora do lote (avulso), use a página do job.' %}
+{% set avulso_hint = 'Para reprocessar fora do lote, use a página do processamento.' %}
 <form action="/web/jobs/{{ job.id }}/reprocess" method="post" class="d-inline"
       onsubmit="return confirm('Reprocessar este vídeo com detecção padrão? Mídia e eventos anteriores serão substituídos.');">
   <input type="hidden" name="sensitive" value="0">
@@ -84,8 +88,9 @@
   <input type="hidden" name="sensitive" value="1">
   <input type="hidden" name="keep_batch" value="1">
   <button type="submit" class="btn btn-sm btn-outline-warning"
-          title="Reprocessar com detecção sensível{% if compact %}. {{ avulso_hint }}{% endif %}">
-    <i class="bi bi-eye{% if not compact %} me-1{% endif %}" aria-hidden="true"></i>{% if not compact %}Sensível{% else %}S{% endif %}
+          title="Reprocessar com detecção sensível{% if compact %}. {{ avulso_hint }}{% endif %}"
+          {% if compact %}aria-label="Reprocessar sensível"{% endif %}>
+    <i class="bi bi-eye{% if not compact %} me-1{% endif %}" aria-hidden="true"></i>{% if not compact %}Sensível{% endif %}
   </button>
 </form>
 {% if compact %}
@@ -101,7 +106,7 @@
 {% if job.error_message %}
   {% if job.status == 'done' %}
   <div class="alert alert-warning py-2 px-2 mb-0{% if compact %} small{% endif %}">
-    <strong class="d-block mb-1"><i class="bi bi-exclamation-triangle me-1"></i>Avisos</strong>
+    <strong class="d-block mb-1"><i class="bi bi-exclamation-triangle me-1" aria-hidden="true"></i>Avisos</strong>
     <pre class="job-error-pre mb-0">{{ job.error_message }}</pre>
   </div>
   {% else %}
@@ -124,8 +129,8 @@
 
 {% macro delete_job_button(job, compact=false) %}
 <form action="/web/jobs/{{ job.id }}/delete" method="post" class="d-inline"
-      onsubmit="return confirm('Excluir este job e TUDO relacionado (vídeo, fotos, clipes, eventos e relatórios)? Esta ação não pode ser desfeita.');">
-  <button type="submit" class="btn btn-sm btn-outline-danger" title="Excluir job">
+      onsubmit="return confirm('Excluir este processamento e tudo relacionado (vídeo, fotos, clipes, eventos e relatórios)? Esta ação não pode ser desfeita.');">
+  <button type="submit" class="btn btn-sm btn-outline-danger" title="Excluir processamento">
     <i class="bi bi-trash{% if not compact %} me-1{% endif %}" aria-hidden="true"></i>{% if not compact %}Excluir{% endif %}
   </button>
 </form>
@@ -134,10 +139,10 @@
 {% macro media_toolbar(view_url, download_url) %}
 <div class="d-flex flex-wrap gap-2 mb-2">
   <a class="btn btn-sm btn-outline-primary" href="{{ view_url }}" target="_blank" rel="noopener">
-    <i class="bi bi-play-circle me-1"></i>Abrir
+    <i class="bi bi-play-circle me-1" aria-hidden="true"></i>Abrir
   </a>
   <a class="btn btn-sm btn-outline-secondary" href="{{ download_url }}">
-    <i class="bi bi-download me-1"></i>Baixar
+    <i class="bi bi-download me-1" aria-hidden="true"></i>Baixar
   </a>
 </div>
 {% endmacro %}
@@ -150,7 +155,7 @@
 </div>
 {% endmacro %}
 
-{% macro video_original_bbox_pair(original_view, original_dl, bbox_view, bbox_dl, original_title='Original', bbox_title='Com bbox (YOLO)') %}
+{% macro video_original_bbox_pair(original_view, original_dl, bbox_view, bbox_dl, original_title='Original', bbox_title='Com caixas de detecção') %}
 <div class="row g-3">
   <div class="col-md-6">
     {{ video_block(original_title, original_view, original_dl) }}
@@ -163,20 +168,20 @@
 
 {% macro job_export_buttons(job) %}
 {% if job.status == 'done' %}
-<div class="btn-group btn-group-sm flex-wrap" role="group" aria-label="Exportar job">
+<div class="export-actions" role="group" aria-label="Exportar processamento">
   <a class="btn btn-outline-primary btn-sm" href="/jobs/{{ job.id }}/reports/html" target="_blank" title="HTML">HTML</a>
   <a class="btn btn-outline-primary btn-sm" href="/jobs/{{ job.id }}/reports/json" title="JSON">JSON</a>
   <a class="btn btn-outline-primary btn-sm" href="/jobs/{{ job.id }}/reports/csv" title="CSV">CSV</a>
   <a class="btn btn-outline-primary btn-sm" href="/jobs/{{ job.id }}/reports/pdf" title="PDF com imagens em alta resolução">PDF</a>
   <a class="btn btn-outline-secondary btn-sm" href="/jobs/{{ job.id }}/reports/pdf-compact" title="PDF leve — imagens comprimidas (~480px)">PDF compacto</a>
-  <a class="btn btn-outline-secondary btn-sm" href="/jobs/{{ job.id }}/supercut" title="Ver supercut">Supercut</a>
-  <a class="btn btn-outline-secondary btn-sm" href="/jobs/{{ job.id }}/supercut?download=1" title="Baixar supercut">↓ Supercut</a>
+  <a class="btn btn-outline-secondary btn-sm" href="/jobs/{{ job.id }}/supercut" title="Ver compilado">Compilado</a>
+  <a class="btn btn-outline-secondary btn-sm" href="/jobs/{{ job.id }}/supercut?download=1" title="Baixar compilado">Baixar compilado</a>
 </div>
 {% endif %}
 {% endmacro %}
 
 {% macro batch_export_buttons(batch) %}
-<div class="btn-group flex-wrap" role="group" aria-label="Exportar lote">
+<div class="export-actions" role="group" aria-label="Exportar lote">
   <a class="btn btn-outline-primary btn-sm" href="/lotes/{{ batch.slug }}/reports/html" target="_blank">HTML</a>
   <a class="btn btn-outline-primary btn-sm" href="/lotes/{{ batch.slug }}/reports/json">JSON</a>
   <a class="btn btn-outline-primary btn-sm" href="/lotes/{{ batch.slug }}/reports/csv">CSV</a>
@@ -184,13 +189,13 @@
      title="ZIP com HTML/JSON/CSV do lote e relatórios por vídeo (PDF compacto por padrão)">ZIP relatórios</a>
   <a class="btn btn-outline-secondary btn-sm" href="/lotes/{{ batch.slug }}/reports.zip?compact=false"
      title="ZIP com PDF padrão (imagens em alta resolução) nos relatórios por vídeo">ZIP PDF padrão</a>
-  <a class="btn btn-outline-secondary btn-sm" href="/lotes/{{ batch.slug }}/supercuts.zip">ZIP supercuts</a>
+  <a class="btn btn-outline-secondary btn-sm" href="/lotes/{{ batch.slug }}/supercuts.zip">ZIP compilados</a>
 </div>
 {% endmacro %}
 
 {% macro event_times(e) %}
 <div class="event-times small">
-  <div><span class="text-muted">Detecção</span> <time>{{ (e.detection_time_sec if e.detection_time_sec is not none else e.start_time_raw_sec) | hms }}</time></div>
+  <div><span class="text-muted">Momento</span> <time>{{ (e.detection_time_sec if e.detection_time_sec is not none else e.start_time_raw_sec) | hms }}</time></div>
   <div class="text-muted"><time>{{ e.start_time_raw_sec | hms }}</time> — <time>{{ e.end_time_sec | hms }}</time></div>
 </div>
 {% endmacro %}

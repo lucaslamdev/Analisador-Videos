@@ -1,54 +1,58 @@
 {% extends "base.html" %}
 {% from "macros.html" import page_header, status_badge, progress_bar, stage_badge, empty_state, cancel_job_button, delete_job_button, retry_job_button, job_error_detail, job_export_buttons %}
-{% block title %}Jobs — Analisador{% endblock %}
+{% block title %}Processamentos — Analisador{% endblock %}
 {% block content %}
-{{ page_header("Jobs", "Acompanhe fila, progresso por frame e erros de processamento.") }}
+{{ page_header("Processamentos", "Acompanhe a fila, o progresso e os avisos das análises.") }}
 
 {% if jobs %}
-<div class="table-responsive">
-  <table class="table table-app table-hover mb-0">
-    <thead>
-      <tr>
-        <th>Job</th><th>Vídeo</th><th>Lote</th><th>Status</th>
-        <th>Progresso</th><th>Frames</th><th>Etapa</th><th>Erro / avisos</th><th>Exportar</th><th>Ações</th>
-      </tr>
-    </thead>
-    <tbody>
-    {% for job in jobs %}
-      <tr>
-        <td><a href="/jobs/{{ job.id }}"><code>{{ job.id[:8] }}…</code></a></td>
-        <td>
-          {% if videos.get(job.video_id) %}
-          <span class="d-block text-truncate" style="max-width:14rem" title="{{ videos[job.video_id].filename }}">
-            {{ videos[job.video_id].filename }}
-          </span>
-          <span class="small text-muted">#{{ job.video_id }}</span>
-          {% else %}#{{ job.video_id }}{% endif %}
-        </td>
-        <td>
-          {% if job.batch_id and batches.get(job.batch_id) %}
-          <a href="/lotes/{{ batches[job.batch_id].slug }}">{{ batches[job.batch_id].slug }}</a>
-          {% else %}—{% endif %}
-        </td>
-        <td>{{ status_badge(job.status) }}</td>
-        <td style="min-width:9rem">{{ progress_bar(job.progress_pct) }}</td>
-        <td class="small font-monospace">
-          {% if job.frames_total %}{{ job.frames_done or 0 }}/{{ job.frames_total }}{% else %}—{% endif %}
-        </td>
-        <td>{{ stage_badge(job.stage) }}</td>
-        <td style="min-width:12rem;max-width:22rem">{{ job_error_detail(job, compact=true) }}</td>
-        <td>{{ job_export_buttons(job) }}</td>
-        <td class="text-nowrap">
-          {{ cancel_job_button(job, compact=true) }}
-          {{ retry_job_button(job, compact=true) }}
-          {{ delete_job_button(job, compact=true) }}
-        </td>
-      </tr>
-    {% endfor %}
-    </tbody>
-  </table>
+<div class="card card-app">
+  <div class="card-body p-0">
+    <div class="table-responsive border-0 rounded-0">
+      <table class="table table-app table-hover table-wide table-processamentos mb-0">
+        <thead>
+          <tr>
+            <th>Processamento</th><th>Vídeo</th><th>Lote</th><th>Status</th>
+            <th>Progresso</th><th>Frames</th><th>Etapa</th><th>Avisos</th><th>Exportar</th><th class="col-actions">Ações</th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for job in jobs %}
+          <tr>
+            <td><a href="/jobs/{{ job.id }}"><code>{{ job.id[:8] }}…</code></a></td>
+            <td>
+              {% if videos.get(job.video_id) %}
+              <span class="d-block cell-filename" title="{{ videos[job.video_id].filename }}">
+                {{ videos[job.video_id].filename }}
+              </span>
+              <span class="small text-muted">#{{ job.video_id }}</span>
+              {% else %}#{{ job.video_id }}{% endif %}
+            </td>
+            <td>
+              {% if job.batch_id and batches.get(job.batch_id) %}
+              <a href="/lotes/{{ batches[job.batch_id].slug }}">{{ batches[job.batch_id].slug }}</a>
+              {% else %}—{% endif %}
+            </td>
+            <td>{{ status_badge(job.status) }}</td>
+            <td style="min-width:9rem">{{ progress_bar(job.progress_pct) }}</td>
+            <td class="small font-monospace">
+              {% if job.frames_total %}{{ job.frames_done or 0 }}/{{ job.frames_total }}{% else %}—{% endif %}
+            </td>
+            <td>{{ stage_badge(job.stage) }}</td>
+            <td class="cell-filename">{{ job_error_detail(job, compact=true) }}</td>
+            <td>{{ job_export_buttons(job) }}</td>
+            <td class="actions-cell">
+              {{ cancel_job_button(job) }}
+              {{ retry_job_button(job) }}
+              {{ delete_job_button(job) }}
+            </td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
 </div>
 {% else %}
-{{ empty_state("Nenhum job na fila", "Inicie um processamento na página inicial.", "cpu") }}
+{{ empty_state("Nenhum processamento na fila", "Inicie uma análise na página inicial.", "cpu") }}
 {% endif %}
 {% endblock %}

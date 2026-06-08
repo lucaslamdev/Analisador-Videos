@@ -21,7 +21,12 @@ from analisador_videos.ingest.service import (
 from analisador_videos.ingest.video_registry import register_or_update_video_by_sha
 from analisador_videos.jobs.cancel import cancel_batch_jobs, cancel_job
 from analisador_videos.jobs.delete import delete_batch, delete_job
-from analisador_videos.jobs.reprocess import create_reprocess_job, create_retry_job
+from analisador_videos.jobs.reprocess import (
+    create_batch_reprocess_jobs,
+    create_reprocess_job,
+    create_retry_job,
+    latest_reprocessable_jobs_in_batch,
+)
 from analisador_videos.jobs.service import create_job, run_async
 from analisador_videos.jobs.sensitive_v2 import (
     find_batch_v2,
@@ -142,19 +147,24 @@ def _artifact_status_context(params_json: str | None = None) -> dict:
 def _parse_form_thresholds(
     confidence_threshold: str | None,
     vehicle_confidence: str | None,
+    person_confidence: str | None = None,
     *,
     params_json: str | None = None,
-) -> tuple[float, float]:
+) -> tuple[float, float, float]:
     defaults = thresholds_for_ui(params_json)
     if confidence_threshold in (None, ""):
         conf = defaults["confidence_threshold"]
     else:
         conf = parse_threshold_value(confidence_threshold, field="Confiança geral")
+    if person_confidence in (None, ""):
+        person = defaults["person_confidence"]
+    else:
+        person = parse_threshold_value(person_confidence, field="Confiança pessoas")
     if vehicle_confidence in (None, ""):
         veh = defaults["vehicle_confidence"]
     else:
         veh = parse_threshold_value(vehicle_confidence, field="Confiança veículos")
-    return conf, veh
+    return conf, person, veh
 
 
 def _batch_map(db: Session, jobs: list[Job]) -> dict[int, Batch]:
@@ -170,6 +180,12 @@ def index(request: Request, db: Session = Depends(get_db)):
     jobs = db.scalars(select(Job).order_by(Job.created_at.desc()).limit(10)).all()
     batches = _batch_map(db, jobs)
     videos = db.scalars(select(Video).order_by(Video.id.desc()).limit(10)).all()
+    video_by_id = {v.id: v for v in videos}
+    recent_events = db.scalars(select(Event).order_by(Event.id.desc()).limit(6)).all()
+    missing_video_ids = {e.video_id for e in recent_events if e.video_id not in video_by_id}
+    if missing_video_ids:
+        extra_videos = db.scalars(select(Video).where(Video.id.in_(missing_video_ids))).all()
+        video_by_id.update({v.id: v for v in extra_videos})
     lotes = db.scalars(select(Batch).order_by(Batch.created_at.desc()).limit(5)).all()
     folder_error = request.query_params.get("folder_error")
     retry_error = request.query_params.get("retry_error")
@@ -188,6 +204,8 @@ def index(request: Request, db: Session = Depends(get_db)):
                 "nav_active": "home",
                 "jobs": jobs,
                 "videos": videos,
+                "recent_events": recent_events,
+                "video_by_id": video_by_id,
                 "batches": batches,
                 "lotes": lotes,
                 "folder_error": folder_error,
@@ -417,6 +435,8 @@ def lote_detail(slug: str, request: Request, db: Session = Depends(get_db)):
     )
     video_by_id = {v.id: v for v in videos}
     batch_v2 = find_batch_v2(db, batch.id) if batch.analysis_version == 1 else None
+    reprocessable_jobs = latest_reprocessable_jobs_in_batch(batch_jobs)
+    sample_params = batch_jobs[0].params_json if batch_jobs else None
     return templates.TemplateResponse(
         request,
         "lote_detail.html",
@@ -431,6 +451,10 @@ def lote_detail(slug: str, request: Request, db: Session = Depends(get_db)):
                 "events": events,
                 "by_class": dict(by_class),
                 "active_jobs_count": _count_active_batch_jobs(db, batch.id),
+                "reprocessable_jobs_count": len(reprocessable_jobs),
+                "retry_error": request.query_params.get("retry_error"),
+                **_class_picker_context(sample_params),
+                **_threshold_picker_context(sample_params),
             }
         ),
     )
@@ -464,6 +488,7 @@ async def web_reprocess_job(
     detection_classes: list[str] = Form(default=[]),
     use_class_picker: str | None = Form(None),
     confidence_threshold: str | None = Form(None),
+    person_confidence: str | None = Form(None),
     vehicle_confidence: str | None = Form(None),
     db: Session = Depends(get_db),
 ):
@@ -480,9 +505,10 @@ async def web_reprocess_job(
                 status_code=303,
             )
     try:
-        conf, veh = _parse_form_thresholds(
+        conf, person, veh = _parse_form_thresholds(
             confidence_threshold,
             vehicle_confidence,
+            person_confidence,
             params_json=parent_job.params_json if parent_job else None,
         )
     except ValueError as exc:
@@ -498,6 +524,7 @@ async def web_reprocess_job(
             keep_batch=keep,
             detection_classes=classes_override,
             confidence_threshold=conf,
+            person_confidence=person,
             vehicle_confidence=veh,
         )
     except ValueError as exc:
@@ -526,6 +553,73 @@ def web_cancel_batch(slug: str, db: Session = Depends(get_db)):
     batch = get_batch_by_slug(db, slug)
     if batch:
         cancel_batch_jobs(db, batch)
+    return RedirectResponse(f"/lotes/{slug}", status_code=303)
+
+
+@router.post("/web/lotes/{slug}/reprocess")
+async def web_reprocess_batch(
+    slug: str,
+    background_tasks: BackgroundTasks,
+    sensitive: str | None = Form(None),
+    detection_classes: list[str] = Form(default=[]),
+    use_class_picker: str | None = Form(None),
+    confidence_threshold: str | None = Form(None),
+    person_confidence: str | None = Form(None),
+    vehicle_confidence: str | None = Form(None),
+    db: Session = Depends(get_db),
+):
+    batch = get_batch_by_slug(db, slug)
+    if not batch:
+        return RedirectResponse("/", status_code=303)
+
+    is_sensitive = sensitive in ("1", "true", "on")
+    classes_override = None
+    if use_class_picker in ("1", "true", "on"):
+        try:
+            classes_override = normalize_form_classes(detection_classes)
+        except ValueError as exc:
+            return RedirectResponse(
+                f"/lotes/{slug}?retry_error={quote(str(exc))}",
+                status_code=303,
+            )
+
+    sample_job = db.scalars(
+        select(Job)
+        .where(Job.batch_id == batch.id)
+        .order_by(Job.created_at.desc())
+        .limit(1)
+    ).first()
+    try:
+        conf, person, veh = _parse_form_thresholds(
+            confidence_threshold,
+            vehicle_confidence,
+            person_confidence,
+            params_json=sample_job.params_json if sample_job else None,
+        )
+    except ValueError as exc:
+        return RedirectResponse(
+            f"/lotes/{slug}?retry_error={quote(str(exc))}",
+            status_code=303,
+        )
+
+    try:
+        new_jobs = create_batch_reprocess_jobs(
+            db,
+            batch,
+            sensitive=is_sensitive,
+            detection_classes=classes_override,
+            confidence_threshold=conf,
+            person_confidence=person,
+            vehicle_confidence=veh,
+        )
+    except ValueError as exc:
+        return RedirectResponse(
+            f"/lotes/{slug}?retry_error={quote(str(exc))}",
+            status_code=303,
+        )
+
+    for job in new_jobs:
+        background_tasks.add_task(run_async, job.id)
     return RedirectResponse(f"/lotes/{slug}", status_code=303)
 
 
@@ -564,6 +658,7 @@ async def web_upload(
     file: UploadFile = File(...),
     detection_classes: list[str] = Form(default=[]),
     confidence_threshold: str | None = Form(None),
+    person_confidence: str | None = Form(None),
     vehicle_confidence: str | None = Form(None),
     db: Session = Depends(get_db),
 ):
@@ -575,7 +670,9 @@ async def web_upload(
             status_code=303,
         )
     try:
-        conf, veh = _parse_form_thresholds(confidence_threshold, vehicle_confidence)
+        conf, person, veh = _parse_form_thresholds(
+            confidence_threshold, vehicle_confidence, person_confidence
+        )
     except ValueError as exc:
         return RedirectResponse(
             f"/?retry_error={quote(str(exc))}",
@@ -596,6 +693,7 @@ async def web_upload(
     params_json = build_detection_params_json(
         detection_classes=classes,
         confidence_threshold=conf,
+        person_confidence=person,
         vehicle_confidence=veh,
     )
     job = create_job(db, video.id, params_json=params_json)
@@ -608,6 +706,7 @@ async def web_process_folder(
     background_tasks: BackgroundTasks,
     detection_classes: list[str] = Form(default=[]),
     confidence_threshold: str | None = Form(None),
+    person_confidence: str | None = Form(None),
     vehicle_confidence: str | None = Form(None),
     db: Session = Depends(get_db),
 ):
@@ -619,7 +718,9 @@ async def web_process_folder(
             status_code=303,
         )
     try:
-        conf, veh = _parse_form_thresholds(confidence_threshold, vehicle_confidence)
+        conf, person, veh = _parse_form_thresholds(
+            confidence_threshold, vehicle_confidence, person_confidence
+        )
     except ValueError as exc:
         return RedirectResponse(
             f"/?retry_error={quote(str(exc))}",
@@ -628,6 +729,7 @@ async def web_process_folder(
     params_json = build_detection_params_json(
         detection_classes=classes,
         confidence_threshold=conf,
+        person_confidence=person,
         vehicle_confidence=veh,
     )
     input_dir = settings.videos_input_dir.resolve()
