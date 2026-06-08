@@ -46,7 +46,8 @@
 <h2 class="section-title">Jobs do lote ({{ batch_jobs|length }})</h2>
 {% if batch_jobs %}
 <div class="table-responsive mb-4">
-  <table class="table table-app table-hover table-sm mb-0">
+  <table id="batch-jobs-table" class="table table-app table-hover table-sm mb-0"
+         data-batch-slug="{{ batch.slug }}">
     <thead>
       <tr>
         <th>Job</th><th>Vídeo</th><th>Status</th><th>Progresso</th>
@@ -55,13 +56,16 @@
     </thead>
     <tbody>
     {% for job in batch_jobs %}
-      <tr>
+      <tr data-job-id="{{ job.id }}">
         <td><a href="/jobs/{{ job.id }}"><code>{{ job.id[:8] }}…</code></a></td>
         <td class="text-truncate" style="max-width:12rem">
           {% if video_by_id.get(job.video_id) %}{{ video_by_id[job.video_id].filename }}{% else %}#{{ job.video_id }}{% endif %}
         </td>
-        <td>{{ status_badge(job.status) }}</td>
-        <td class="small">{{ job.progress_pct }}%</td>
+        <td class="job-status-cell">{{ status_badge(job.status) }}</td>
+        <td class="job-progress-cell small">
+          {% if job.stage %}{{ job.stage | stage_pt }} · {% endif %}{{ job.progress_pct }}%
+          {% if job.frames_total %} ({{ job.frames_done or 0 }}/{{ job.frames_total }}){% endif %}
+        </td>
         <td>{{ job_export_buttons(job) }}</td>
         <td class="text-nowrap">
           {{ reprocess_job_buttons(job, compact=true) }}
@@ -140,5 +144,11 @@
 </div>
 {% else %}
 {{ empty_state("Sem eventos", "Aguarde o processamento dos vídeos do lote.", "hourglass") }}
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{% if active_jobs_count > 0 %}
+<script src="/static/batch-progress.js"></script>
 {% endif %}
 {% endblock %}

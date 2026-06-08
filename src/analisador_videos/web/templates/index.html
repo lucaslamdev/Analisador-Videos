@@ -59,6 +59,26 @@
       <div class="card-body d-flex flex-column">
         <p class="text-muted">Coloque MP4 em <code>incoming/</code> ou em subpastas. Um lote do dia é criado automaticamente.</p>
         <p class="text-muted small mb-0">Pasta lida: <code>{{ folder_path|default("incoming") }}</code></p>
+        {% if disk_estimate %}
+        <div class="alert {{ 'alert-danger' if not disk_estimate.sufficient else 'alert-info' }} mt-3 mb-0" role="alert">
+          <div class="d-flex align-items-start gap-2">
+            <i class="bi {{ 'bi-exclamation-triangle-fill' if not disk_estimate.sufficient else 'bi-hdd-stack' }} fs-5"></i>
+            <div class="small">
+              <strong>{{ disk_estimate.video_count }} vídeo(s)</strong> prontos para processar.
+              <ul class="mb-0 mt-2 ps-3">
+                <li>Duração total estimada: <strong>{{ disk_estimate.total_duration_sec | hms }}</strong></li>
+                <li>Espaço estimado necessário: <strong>~{{ "%.2f"|format(disk_estimate.estimated_gb) }} GB</strong>
+                  <span class="text-muted">(cópia {{ "%.2f"|format(disk_estimate.source_files_gb) }} GB + derivados/relatórios)</span>
+                </li>
+                <li>Espaço livre em disco: <strong>{{ "%.2f"|format(disk_estimate.free_disk_gb) }} GB</strong></li>
+              </ul>
+              {% if not disk_estimate.sufficient %}
+              <p class="mb-0 mt-2"><strong>Atenção:</strong> espaço livre pode ser insuficiente para este lote. Libere disco em <code>data/</code> antes de continuar.</p>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+        {% endif %}
         <form action="/web/process-folder" method="post" class="mt-auto">
           {% set picker_id = "folder" %}
           {% include "partials/detection_class_picker.html" %}

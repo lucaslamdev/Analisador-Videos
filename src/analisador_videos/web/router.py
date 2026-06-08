@@ -12,6 +12,7 @@ from analisador_videos.config import settings
 from analisador_videos.db.database import get_db
 from analisador_videos.db.models import Batch, Event, Job, Video
 from analisador_videos.ingest.batch_service import get_batch_by_slug, next_batch_slug
+from analisador_videos.ingest.disk_estimate import estimate_incoming_disk_usage
 from analisador_videos.ingest.service import (
     copy_to_storage,
     save_upload,
@@ -124,6 +125,10 @@ def index(request: Request, db: Session = Depends(get_db)):
     folder_path = request.query_params.get("folder") or str(
         settings.videos_input_dir.resolve()
     )
+    disk_estimate = estimate_incoming_disk_usage(
+        settings.videos_input_dir,
+        settings.data_dir,
+    )
     return templates.TemplateResponse(
         request,
         "index.html",
@@ -137,6 +142,7 @@ def index(request: Request, db: Session = Depends(get_db)):
                 "folder_error": folder_error,
                 "retry_error": retry_error,
                 "folder_path": folder_path,
+                "disk_estimate": disk_estimate,
                 **_class_picker_context(),
             }
         ),

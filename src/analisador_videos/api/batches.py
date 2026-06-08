@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from analisador_videos.config import settings
 from analisador_videos.db.database import get_db
-from analisador_videos.db.models import Artifact, Batch, Video
+from analisador_videos.db.models import Artifact, Batch, Job, Video
 from analisador_videos.ingest.batch_service import get_batch_by_slug
 from analisador_videos.jobs.cancel import cancel_batch_jobs
 from analisador_videos.jobs.delete import delete_batch
@@ -36,6 +36,37 @@ _MEDIA = {
 
 def _videos_for_batch(db: Session, batch: Batch) -> list[Video]:
     return list(db.scalars(select(Video).where(Video.batch_id == batch.id)).all())
+
+
+@router.get("/lotes/{slug}/jobs-status")
+def batch_jobs_status(slug: str, db: Session = Depends(get_db)):
+    batch = get_batch_by_slug(db, slug)
+    if not batch:
+        raise HTTPException(404, "Lote não encontrado")
+    jobs = list(
+        db.scalars(
+            select(Job)
+            .where(Job.batch_id == batch.id)
+            .order_by(Job.created_at.desc())
+        )
+    )
+    active = sum(1 for j in jobs if j.status in ("queued", "running"))
+    return {
+        "slug": batch.slug,
+        "active_jobs_count": active,
+        "jobs": [
+            {
+                "id": j.id,
+                "video_id": j.video_id,
+                "status": j.status,
+                "progress_pct": j.progress_pct,
+                "stage": j.stage,
+                "frames_done": j.frames_done,
+                "frames_total": j.frames_total,
+            }
+            for j in jobs
+        ],
+    }
 
 
 @router.get("/lotes/{slug}")

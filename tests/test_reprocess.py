@@ -1,6 +1,7 @@
 import json
 
 import pytest
+from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 
 from analisador_videos.config import settings
@@ -14,6 +15,7 @@ from analisador_videos.jobs.detection_params import (
     detection_settings_for_job,
 )
 from analisador_videos.jobs.reprocess import create_reprocess_job, create_retry_job
+from analisador_videos.main import app
 
 
 def _setup_db(tmp_path, monkeypatch):
@@ -71,6 +73,34 @@ def test_create_reprocess_job_done_sensitive(tmp_path, monkeypatch):
         assert params["reprocess_of"] == parent.id
         db.refresh(video)
         assert video.status == "pending"
+
+
+def test_web_reprocess_keep_batch_zero_clears_batch(tmp_path, monkeypatch):
+    _setup_db(tmp_path, monkeypatch)
+    with database.SessionLocal() as db:
+        batch, _ = next_batch_slug(db)
+        _, parent = _video_and_job(db, tmp_path, status="done", batch_id=batch.id)
+        parent_id = parent.id
+
+    async def noop_run_async(job_id: str) -> None:
+        pass
+
+    monkeypatch.setattr("analisador_videos.web.router.run_async", noop_run_async)
+
+    with TestClient(app) as client:
+        r = client.post(
+            f"/web/jobs/{parent_id}/reprocess",
+            data={"sensitive": "0", "keep_batch": "0"},
+            follow_redirects=False,
+        )
+
+    assert r.status_code == 303
+    new_job_id = r.headers["location"].split("/")[-1].split("?")[0]
+
+    with database.SessionLocal() as db:
+        new_job = db.get(Job, new_job_id)
+        assert new_job is not None
+        assert new_job.batch_id is None
 
 
 def test_create_reprocess_job_outside_batch(tmp_path, monkeypatch):

@@ -57,9 +57,14 @@
           <p class="small fw-semibold mb-2"><i class="bi bi-sliders me-1"></i>Reprocessar este vídeo</p>
           <form action="/web/jobs/{{ job.id }}/reprocess" method="post">
             <input type="hidden" name="use_class_picker" value="1">
-            <input type="hidden" name="keep_batch" value="1">
             {% set picker_id = "reprocess" %}
             {% include "partials/detection_class_picker.html" %}
+            <div class="form-check form-check-sm mb-2">
+              <input class="form-check-input" type="checkbox" name="keep_batch" value="0" id="keep-batch-off">
+              <label class="form-check-label small" for="keep-batch-off">
+                Reprocessar fora do lote (avulso)
+              </label>
+            </div>
             <div class="d-flex flex-wrap gap-2">
               <button type="submit" name="sensitive" value="0" class="btn btn-sm btn-outline-primary"
                       onclick="return confirm('Reprocessar com detecção padrão? Mídia e eventos anteriores serão substituídos.');">

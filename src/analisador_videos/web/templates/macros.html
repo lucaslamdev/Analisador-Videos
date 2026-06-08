@@ -69,11 +69,13 @@
 
 {% macro reprocess_job_buttons(job, compact=false) %}
 {% if job.status in ('done', 'failed', 'cancelled') %}
+{% set avulso_hint = 'Para reprocessar fora do lote (avulso), use a página do job.' %}
 <form action="/web/jobs/{{ job.id }}/reprocess" method="post" class="d-inline"
       onsubmit="return confirm('Reprocessar este vídeo com detecção padrão? Mídia e eventos anteriores serão substituídos.');">
   <input type="hidden" name="sensitive" value="0">
   <input type="hidden" name="keep_batch" value="1">
-  <button type="submit" class="btn btn-sm btn-outline-primary" title="Reprocessar com detecção padrão">
+  <button type="submit" class="btn btn-sm btn-outline-primary"
+          title="Reprocessar com detecção padrão{% if compact %}. {{ avulso_hint }}{% endif %}">
     <i class="bi bi-arrow-clockwise{% if not compact %} me-1{% endif %}" aria-hidden="true"></i>{% if not compact %}Reprocessar{% endif %}
   </button>
 </form>
@@ -81,10 +83,17 @@
       onsubmit="return confirm('Reprocessar com detecção sensível (limiares mais baixos)? Pode gerar mais falsos positivos.');">
   <input type="hidden" name="sensitive" value="1">
   <input type="hidden" name="keep_batch" value="1">
-  <button type="submit" class="btn btn-sm btn-outline-warning" title="Reprocessar com detecção sensível">
+  <button type="submit" class="btn btn-sm btn-outline-warning"
+          title="Reprocessar com detecção sensível{% if compact %}. {{ avulso_hint }}{% endif %}">
     <i class="bi bi-eye{% if not compact %} me-1{% endif %}" aria-hidden="true"></i>{% if not compact %}Sensível{% else %}S{% endif %}
   </button>
 </form>
+{% if compact %}
+<a href="/jobs/{{ job.id }}" class="btn btn-sm btn-outline-secondary"
+   title="{{ avulso_hint }}">
+  <i class="bi bi-sliders" aria-hidden="true"></i>
+</a>
+{% endif %}
 {% endif %}
 {% endmacro %}
 
