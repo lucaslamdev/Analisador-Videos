@@ -11,7 +11,11 @@ from analisador_videos.jobs.cancel import cancel_job
 from analisador_videos.jobs.delete import delete_job
 from analisador_videos.jobs.reprocess import create_reprocess_job, create_retry_job
 from analisador_videos.jobs.service import run_async
-from analisador_videos.jobs.sensitive_v2 import create_sensitive_bbox_v2_for_job, find_job_v2
+from analisador_videos.jobs.sensitive_v2 import (
+    find_job_v2,
+    prepare_sensitive_bbox_v2_for_job,
+    run_sensitive_v2_async,
+)
 from analisador_videos.reports.job_exports import ensure_job_report, job_supercut_path
 from analisador_videos.reports.pdf_quality import normalize_report_format
 from analisador_videos.util.media_response import video_file_response
@@ -33,19 +37,13 @@ async def retry_job_endpoint(job_id: str, db: Session = Depends(get_db)):
         new_job = create_retry_job(db, job_id)
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
-    await run_async(new_job.id)
-    db.refresh(new_job)
-    retry_messages = {
-        "done": "Reprocessamento concluído",
-        "failed": "Reprocessamento falhou",
-        "cancelled": "Reprocessamento cancelado",
-    }
+    asyncio.create_task(run_async(new_job.id))
     return {
         "previous_job_id": job_id,
         "job_id": new_job.id,
         "video_id": new_job.video_id,
         "status": new_job.status,
-        "message": retry_messages.get(new_job.status, "Reprocessamento enfileirado"),
+        "message": "Reprocessamento enfileirado",
     }
 
 
@@ -136,15 +134,18 @@ def job_report(
 
 
 @router.post("/jobs/{job_id}/sensitive-v2")
-def job_sensitive_v2(job_id: str, db: Session = Depends(get_db)):
+async def job_sensitive_v2(job_id: str, db: Session = Depends(get_db)):
     try:
-        job = create_sensitive_bbox_v2_for_job(db, job_id)
+        job = prepare_sensitive_bbox_v2_for_job(db, job_id)
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
+    asyncio.create_task(run_sensitive_v2_async(job.id))
     return {
         "parent_job_id": job_id,
         "job_v2_id": job.id,
+        "status": job.status,
         "analysis_version": 2,
+        "message": "Análise v2 enfileirada",
     }
 
 

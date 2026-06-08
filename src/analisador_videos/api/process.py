@@ -1,3 +1,4 @@
+import asyncio
 from pathlib import Path
 
 from fastapi import APIRouter, Body, Depends, File, HTTPException, Query, UploadFile
@@ -11,10 +12,10 @@ from analisador_videos.db.models import Video
 from analisador_videos.ingest.service import (
     copy_to_storage,
     file_sha256,
-    probe_video,
     save_upload,
     scan_folder,
 )
+from analisador_videos.ingest.video_registry import register_or_update_video_by_sha
 from analisador_videos.db.models import Batch
 from analisador_videos.ingest.batch_service import next_batch_slug
 from analisador_videos.jobs.detection_params import build_detection_params_json
@@ -50,26 +51,13 @@ def _resolve_batch(
 def _register_video(
     db: Session, path: Path, filename: str, batch_id: int | None = None
 ) -> Video:
-    sha = file_sha256(path)
-    existing = db.scalar(select(Video).where(Video.sha256 == sha))
-    if existing:
-        return existing
-    meta = probe_video(path)
-    video = Video(
-        filename=filename,
-        path=str(path),
-        sha256=sha,
+    return register_or_update_video_by_sha(
+        db,
+        path,
+        filename,
         batch_id=batch_id,
-        duration_sec=meta["duration_sec"],
-        fps_source=meta["fps_source"],
-        width=meta["width"],
-        height=meta["height"],
-        status="pending",
+        reimport_for_processing=True,
     )
-    db.add(video)
-    db.commit()
-    db.refresh(video)
-    return video
 
 
 @router.post("/process")
@@ -113,7 +101,6 @@ async def process_video(
     batch_id = batch.id if batch else None
 
     results = []
-    pending_async: list = []
     seen_video_ids: set[int] = set()
     for path, filename in video_paths:
         sha = file_sha256(path)
@@ -130,12 +117,6 @@ async def process_video(
                 continue
 
         video = _register_video(db, path, filename, batch_id=batch_id)
-        if batch_id and video.batch_id != batch_id:
-            video.batch_id = batch_id
-            db.commit()
-        if force and video.status == "done":
-            video.status = "pending"
-            db.commit()
 
         if video.id in seen_video_ids:
             continue
@@ -158,14 +139,9 @@ async def process_video(
             run_sync(job.id)
             entry["status"] = "done"
         else:
-            pending_async.append(run_async(job.id))
+            asyncio.create_task(run_async(job.id))
             entry["status"] = "queued"
         results.append(entry)
-
-    if pending_async:
-        import asyncio
-
-        await asyncio.gather(*pending_async, return_exceptions=True)
 
     status_code = 200 if sync else 202
     from fastapi.responses import JSONResponse

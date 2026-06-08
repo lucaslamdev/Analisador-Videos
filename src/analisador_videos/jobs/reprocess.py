@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from analisador_videos.db.models import Job, Video
 from analisador_videos.jobs.delete import (
+    _cleanup_video_artifacts_and_tracks,
     _cleanup_video_media_files,
     _cleanup_video_report_files,
 )
@@ -69,6 +70,7 @@ def create_reprocess_job(
     video.batch_id = batch_id
     db.commit()
 
+    _cleanup_video_artifacts_and_tracks(db, video.id)
     _cleanup_video_media_files(video.id)
     _cleanup_video_report_files(video.id)
 

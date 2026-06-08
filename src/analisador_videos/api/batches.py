@@ -1,3 +1,4 @@
+import asyncio
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -11,7 +12,11 @@ from analisador_videos.db.models import Artifact, Batch, Video
 from analisador_videos.ingest.batch_service import get_batch_by_slug
 from analisador_videos.jobs.cancel import cancel_batch_jobs
 from analisador_videos.jobs.delete import delete_batch
-from analisador_videos.jobs.sensitive_v2 import create_sensitive_bbox_v2_for_batch, find_batch_v2
+from analisador_videos.jobs.sensitive_v2 import (
+    find_batch_v2,
+    prepare_sensitive_bbox_v2_for_batch,
+    run_sensitive_v2_batch_async,
+)
 from analisador_videos.media.zip_utils import zip_named
 from analisador_videos.reports.batch_builder import build_batch_html
 from analisador_videos.reports.batch_exports import (
@@ -83,15 +88,18 @@ def delete_batch_endpoint(slug: str, db: Session = Depends(get_db)):
 
 
 @router.post("/lotes/{slug}/sensitive-v2")
-def batch_sensitive_v2(slug: str, db: Session = Depends(get_db)):
+async def batch_sensitive_v2(slug: str, db: Session = Depends(get_db)):
     try:
-        batch_v2 = create_sensitive_bbox_v2_for_batch(db, slug)
+        batch_v2 = prepare_sensitive_bbox_v2_for_batch(db, slug)
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
+    asyncio.create_task(run_sensitive_v2_batch_async(batch_v2.id, slug))
     return {
         "parent_slug": slug,
         "batch_v2_slug": batch_v2.slug,
+        "status": "queued",
         "analysis_version": 2,
+        "message": "Análise v2 do lote enfileirada",
     }
 
 

@@ -1,6 +1,8 @@
 """Job/lote v2: bbox sensível em todos os clipes/supercuts + relatórios v2 (v1 preservado)."""
 
+import asyncio
 import json
+import logging
 import uuid
 from datetime import datetime
 
@@ -12,6 +14,8 @@ from analisador_videos.ingest.batch_service import get_batch_by_slug
 from analisador_videos.media.annotate_options import AnnotateOptions
 from analisador_videos.pipeline.annotate_media import annotate_event_clip, annotate_supercut
 from analisador_videos.reports.v2_reports import write_batch_reports_v2, write_video_reports_v2
+
+logger = logging.getLogger(__name__)
 
 
 def _sensitive_params_json(parent_params: str | None) -> str:
@@ -34,7 +38,7 @@ def find_job_v2(db: Session, parent_job_id: str) -> Job | None:
     )
 
 
-def create_sensitive_bbox_v2_for_job(db: Session, parent_job_id: str) -> Job:
+def prepare_sensitive_bbox_v2_for_job(db: Session, parent_job_id: str) -> Job:
     parent = db.get(Job, parent_job_id)
     if not parent:
         raise ValueError("Job não encontrado")
@@ -51,7 +55,7 @@ def create_sensitive_bbox_v2_for_job(db: Session, parent_job_id: str) -> Job:
             batch_id=parent.batch_id,
             parent_job_id=parent.id,
             analysis_version=2,
-            status="running",
+            status="queued",
             progress_pct=0,
             stage="bbox_sensitive",
             params_json=_sensitive_params_json(parent.params_json),
@@ -60,28 +64,80 @@ def create_sensitive_bbox_v2_for_job(db: Session, parent_job_id: str) -> Job:
         db.add(job)
         db.commit()
         db.refresh(job)
+    elif job.status in ("done", "failed", "cancelled"):
+        job.status = "queued"
+        job.progress_pct = 0
+        job.stage = "bbox_sensitive"
+        job.finished_at = None
+        db.commit()
+        db.refresh(job)
 
-    video = db.get(Video, parent.video_id)
-    if not video:
-        raise ValueError("Vídeo não encontrado")
+    return job
 
-    mode = AnnotateOptions(sensitive=True)
-    events = list(db.scalars(select(Event).where(Event.video_id == video.id)))
-    for event in events:
-        if event.clip_path:
-            annotate_event_clip(db, event.id, mode=mode)
 
+def execute_sensitive_bbox_v2_for_job(job_id: str) -> None:
+    from analisador_videos.db import database
+
+    if database.SessionLocal is None:
+        database.init_engine()
+    assert database.SessionLocal is not None
+
+    with database.SessionLocal() as db:
+        job = db.get(Job, job_id)
+        if not job:
+            logger.error("Job v2 %s não encontrado", job_id)
+            return
+        if job.status == "cancelled":
+            return
+
+        parent = db.get(Job, job.parent_job_id) if job.parent_job_id else None
+        if not parent:
+            job.status = "failed"
+            job.stage = "failed"
+            db.commit()
+            return
+
+        video = db.get(Video, parent.video_id)
+        if not video:
+            job.status = "failed"
+            job.stage = "failed"
+            db.commit()
+            return
+
+        job.status = "running"
+        job.progress_pct = 0
+        db.commit()
+
+        mode = AnnotateOptions(sensitive=True)
+        events = list(db.scalars(select(Event).where(Event.video_id == video.id)))
+        for event in events:
+            if event.clip_path:
+                annotate_event_clip(db, event.id, mode=mode)
+
+        try:
+            annotate_supercut(db, video.id, class_filter=None, mode=mode)
+        except ValueError:
+            pass
+
+        write_video_reports_v2(db, video, job)
+        job.status = "done"
+        job.progress_pct = 100
+        job.stage = "done"
+        job.finished_at = datetime.utcnow()
+        db.commit()
+
+
+async def run_sensitive_v2_async(job_id: str) -> None:
     try:
-        annotate_supercut(db, video.id, class_filter=None, mode=mode)
-    except ValueError:
-        pass
+        await asyncio.to_thread(execute_sensitive_bbox_v2_for_job, job_id)
+    except Exception:
+        logger.exception("Job v2 %s terminou com exceção não tratada", job_id)
 
-    write_video_reports_v2(db, video, job)
-    job.status = "done"
-    job.progress_pct = 100
-    job.stage = "done"
-    job.finished_at = datetime.utcnow()
-    db.commit()
+
+def create_sensitive_bbox_v2_for_job(db: Session, parent_job_id: str) -> Job:
+    """Compat síncrona: prepara e executa na mesma sessão (testes/scripts)."""
+    job = prepare_sensitive_bbox_v2_for_job(db, parent_job_id)
+    execute_sensitive_bbox_v2_for_job(job.id)
     db.refresh(job)
     return job
 
@@ -95,7 +151,7 @@ def find_batch_v2(db: Session, parent_batch_id: int) -> Batch | None:
     )
 
 
-def create_sensitive_bbox_v2_for_batch(db: Session, parent_slug: str) -> Batch:
+def prepare_sensitive_bbox_v2_for_batch(db: Session, parent_slug: str) -> Batch:
     parent = get_batch_by_slug(db, parent_slug)
     if not parent:
         raise ValueError("Lote não encontrado")
@@ -131,9 +187,54 @@ def create_sensitive_bbox_v2_for_batch(db: Session, parent_slug: str) -> Batch:
         raise ValueError("Nenhum job concluído no lote")
 
     for parent_job in parent_jobs:
-        v2 = create_sensitive_bbox_v2_for_job(db, parent_job.id)
+        v2 = prepare_sensitive_bbox_v2_for_job(db, parent_job.id)
         v2.batch_id = batch_v2.id
         db.commit()
 
-    write_batch_reports_v2(db, batch_v2, parent.slug)
+    return batch_v2
+
+
+def execute_sensitive_bbox_v2_for_batch(batch_v2_id: int, parent_slug: str) -> None:
+    from analisador_videos.db import database
+
+    if database.SessionLocal is None:
+        database.init_engine()
+    assert database.SessionLocal is not None
+
+    with database.SessionLocal() as db:
+        batch_v2 = db.get(Batch, batch_v2_id)
+        if not batch_v2:
+            logger.error("Lote v2 %s não encontrado", batch_v2_id)
+            return
+
+        jobs = list(
+            db.scalars(
+                select(Job).where(
+                    Job.batch_id == batch_v2.id,
+                    Job.analysis_version == 2,
+                )
+            )
+        )
+        for job in jobs:
+            execute_sensitive_bbox_v2_for_job(job.id)
+
+        write_batch_reports_v2(db, batch_v2, parent_slug)
+
+
+async def run_sensitive_v2_batch_async(batch_v2_id: int, parent_slug: str) -> None:
+    try:
+        await asyncio.to_thread(
+            execute_sensitive_bbox_v2_for_batch, batch_v2_id, parent_slug
+        )
+    except Exception:
+        logger.exception(
+            "Lote v2 %s terminou com exceção não tratada", batch_v2_id
+        )
+
+
+def create_sensitive_bbox_v2_for_batch(db: Session, parent_slug: str) -> Batch:
+    """Compat síncrona: prepara e executa na mesma sessão (testes/scripts)."""
+    batch_v2 = prepare_sensitive_bbox_v2_for_batch(db, parent_slug)
+    execute_sensitive_bbox_v2_for_batch(batch_v2.id, parent_slug)
+    db.refresh(batch_v2)
     return batch_v2

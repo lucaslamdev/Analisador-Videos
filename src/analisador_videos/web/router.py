@@ -1,3 +1,4 @@
+import asyncio
 from collections import Counter
 from pathlib import Path
 from urllib.parse import quote
@@ -14,20 +15,21 @@ from analisador_videos.db.models import Batch, Event, Job, Video
 from analisador_videos.ingest.batch_service import get_batch_by_slug, next_batch_slug
 from analisador_videos.ingest.service import (
     copy_to_storage,
-    file_sha256,
-    probe_video,
     save_upload,
     scan_folder,
 )
+from analisador_videos.ingest.video_registry import register_or_update_video_by_sha
 from analisador_videos.jobs.cancel import cancel_batch_jobs, cancel_job
 from analisador_videos.jobs.delete import delete_batch, delete_job
 from analisador_videos.jobs.reprocess import create_reprocess_job, create_retry_job
 from analisador_videos.jobs.service import create_job, run_async
 from analisador_videos.jobs.sensitive_v2 import (
-    create_sensitive_bbox_v2_for_batch,
-    create_sensitive_bbox_v2_for_job,
     find_batch_v2,
     find_job_v2,
+    prepare_sensitive_bbox_v2_for_batch,
+    prepare_sensitive_bbox_v2_for_job,
+    run_sensitive_v2_async,
+    run_sensitive_v2_batch_async,
 )
 from analisador_videos.media.annotate_options import AnnotateOptions
 from analisador_videos.pipeline.annotate_media import (
@@ -446,6 +448,7 @@ def lote_report_html(slug: str, db: Session = Depends(get_db)):
 
 @router.post("/web/upload")
 async def web_upload(
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     detection_classes: list[str] = Form(default=[]),
     db: Session = Depends(get_db),
@@ -463,30 +466,15 @@ async def web_upload(
         content,
         settings.data_dir / "videos",
     )
-    sha = file_sha256(dest)
-    existing = db.scalar(select(Video).where(Video.sha256 == sha))
-    if existing:
-        video = existing
-        video.status = "pending"
-        db.commit()
-    else:
-        meta = probe_video(dest)
-        video = Video(
-            filename=file.filename or dest.name,
-            path=str(dest),
-            sha256=sha,
-            duration_sec=meta["duration_sec"],
-            fps_source=meta["fps_source"],
-            width=meta["width"],
-            height=meta["height"],
-            status="pending",
-        )
-        db.add(video)
-        db.commit()
-        db.refresh(video)
+    video = register_or_update_video_by_sha(
+        db,
+        dest,
+        file.filename or dest.name,
+        reimport_for_processing=True,
+    )
     params_json = build_detection_params_json(detection_classes=classes)
     job = create_job(db, video.id, params_json=params_json)
-    await run_async(job.id)
+    background_tasks.add_task(run_async, job.id)
     return RedirectResponse("/jobs", status_code=303)
 
 
@@ -515,29 +503,13 @@ async def web_process_folder(
     seen_video_ids: set[int] = set()
     for p in paths:
         dest = copy_to_storage(p, settings.data_dir / "videos")
-        sha = file_sha256(dest)
-        existing = db.scalar(select(Video).where(Video.sha256 == sha))
-        if existing:
-            video = existing
-            video.batch_id = batch.id
-            video.status = "pending"
-            db.commit()
-        else:
-            meta = probe_video(dest)
-            video = Video(
-                filename=p.name,
-                path=str(dest),
-                sha256=sha,
-                batch_id=batch.id,
-                duration_sec=meta["duration_sec"],
-                fps_source=meta["fps_source"],
-                width=meta["width"],
-                height=meta["height"],
-                status="pending",
-            )
-            db.add(video)
-            db.commit()
-            db.refresh(video)
+        video = register_or_update_video_by_sha(
+            db,
+            dest,
+            p.name,
+            batch_id=batch.id,
+            reimport_for_processing=True,
+        )
         if video.id in seen_video_ids:
             continue
         seen_video_ids.add(video.id)
@@ -609,18 +581,22 @@ def web_annotate_supercut(
 
 
 @router.post("/web/jobs/{job_id}/sensitive-v2")
-def web_job_sensitive_v2(job_id: str, db: Session = Depends(get_db)):
+async def web_job_sensitive_v2(job_id: str, db: Session = Depends(get_db)):
     try:
-        create_sensitive_bbox_v2_for_job(db, job_id)
+        job = prepare_sensitive_bbox_v2_for_job(db, job_id)
+        asyncio.create_task(run_sensitive_v2_async(job.id))
     except ValueError:
         pass
     return RedirectResponse(f"/jobs/{job_id}", status_code=303)
 
 
 @router.post("/web/lotes/{slug}/sensitive-v2")
-def web_batch_sensitive_v2(slug: str, db: Session = Depends(get_db)):
+async def web_batch_sensitive_v2(slug: str, db: Session = Depends(get_db)):
     try:
-        batch_v2 = create_sensitive_bbox_v2_for_batch(db, slug)
+        batch_v2 = prepare_sensitive_bbox_v2_for_batch(db, slug)
+        asyncio.create_task(
+            run_sensitive_v2_batch_async(batch_v2.id, slug)
+        )
         return RedirectResponse(f"/lotes/{batch_v2.slug}", status_code=303)
     except ValueError:
         return RedirectResponse(f"/lotes/{slug}", status_code=303)

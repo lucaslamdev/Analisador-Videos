@@ -42,6 +42,16 @@ def _cleanup_video_report_files(video_id: int) -> None:
     _unlink_glob(report_dir / "pdf_compact_cache", f"v{video_id}_*")
 
 
+def _cleanup_video_artifacts_and_tracks(db: Session, video_id: int) -> None:
+    """Remove artefatos e tracks do vídeo (registros DB + ficheiros em Artifact.path)."""
+    artifacts = list(db.scalars(select(Artifact).where(Artifact.video_id == video_id)))
+    for artifact in artifacts:
+        _unlink_file(artifact.path)
+
+    db.query(Track).filter(Track.video_id == video_id).delete()
+    db.query(Artifact).filter(Artifact.video_id == video_id).delete()
+
+
 def _cleanup_video_media_files(video_id: int) -> None:
     vid = video_id
     _unlink_glob(settings.data_dir / "snapshots", f"video{vid}_*")
@@ -89,17 +99,12 @@ def delete_video(db: Session, video_id: int) -> bool:
         _unlink_file(event.clip_annotated_path)
         _unlink_file(event.clip_annotated_sensitive_path)
 
-    artifacts = list(db.scalars(select(Artifact).where(Artifact.video_id == video_id)))
-    for artifact in artifacts:
-        _unlink_file(artifact.path)
-
+    _cleanup_video_artifacts_and_tracks(db, video_id)
     _cleanup_video_media_files(video_id)
     _cleanup_video_report_files(video_id)
     _unlink_file(video.path)
 
-    db.query(Track).filter(Track.video_id == video_id).delete()
     db.query(Event).filter(Event.video_id == video_id).delete()
-    db.query(Artifact).filter(Artifact.video_id == video_id).delete()
     db.delete(video)
     db.commit()
     return True

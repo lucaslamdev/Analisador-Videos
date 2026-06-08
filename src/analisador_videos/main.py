@@ -2,6 +2,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from analisador_videos.api import batches, events, jobs, process, status, videos
@@ -43,13 +44,29 @@ def health():
     return {"status": "ok", **health_info()}
 
 
-@app.get("/media/{media_path:path}")
-def serve_media(media_path: str):
-    candidate = Path(media_path)
-    if not candidate.is_file():
-        candidate = Path.cwd() / media_path
+def _resolve_media_path(media_path: str) -> Path:
+    data_dir = settings.data_dir.resolve()
+    raw = Path(media_path)
+
+    if raw.is_absolute():
+        candidate = raw.resolve()
+    else:
+        rel = raw
+        if rel.parts and rel.parts[0].lower() == "data":
+            rel = Path(*rel.parts[1:]) if len(rel.parts) > 1 else Path(".")
+        candidate = (data_dir / rel).resolve()
+
+    try:
+        candidate.relative_to(data_dir)
+    except ValueError:
+        raise HTTPException(403, "Acesso negado") from None
+
     if not candidate.is_file():
         raise HTTPException(404, "Arquivo não encontrado")
-    from fastapi.responses import FileResponse
 
-    return FileResponse(candidate)
+    return candidate
+
+
+@app.get("/media/{media_path:path}")
+def serve_media(media_path: str):
+    return FileResponse(_resolve_media_path(media_path))
