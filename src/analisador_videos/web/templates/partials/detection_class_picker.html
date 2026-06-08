@@ -1,12 +1,13 @@
-{# Requer: all_detection_classes, selected_detection_classes (set), people_vehicle_detection_classes #}
+{# Requer: all_detection_classes, selected_detection_classes (set), people_vehicle_detection_classes, picker_id #}
 <div class="detection-class-picker mb-3" data-detection-class-picker
      data-people-vehicle-classes='{{ people_vehicle_detection_classes | tojson }}'>
+  <script type="application/json" data-people-vehicle-classes-json>{{ people_vehicle_detection_classes | tojson }}</script>
   <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
     <label class="form-label mb-0 small fw-semibold">Classes a detectar</label>
-    <div class="d-flex flex-wrap gap-1">
-      <button type="button" class="btn btn-outline-secondary btn-sm" data-class-pick-all>Todas</button>
-      <button type="button" class="btn btn-outline-secondary btn-sm" data-class-pick-people-vehicles>Veículos/Pessoas</button>
-      <button type="button" class="btn btn-outline-secondary btn-sm" data-class-pick-none>Nenhuma</button>
+    <div class="d-flex flex-wrap gap-1 detection-class-presets" role="group" aria-label="Atalhos de classes">
+      <button type="button" class="btn btn-outline-secondary btn-sm" data-class-pick="all">Todas</button>
+      <button type="button" class="btn btn-outline-secondary btn-sm" data-class-pick="people-vehicles">Veículos/Pessoas</button>
+      <button type="button" class="btn btn-outline-secondary btn-sm" data-class-pick="none">Nenhuma</button>
     </div>
   </div>
   <p class="text-muted small mb-2">Desmarque classes que não precisa (ex.: pássaro, banco).</p>

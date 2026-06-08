@@ -11,14 +11,25 @@ def test_home_includes_class_picker_preset_data():
     client = TestClient(app)
     html = client.get("/").text
 
-    assert html.count("data-class-pick-people-vehicles") >= 1
-    assert "/static/detection-classes.js" in html
+    assert html.count('data-class-pick="people-vehicles"') >= 1
+    assert 'data-class-pick="all"' in html
+    assert 'data-class-pick="none"' in html
+    assert "/static/detection-classes.js?v=5" in html
 
-    matches = re.findall(
+    json_blocks = re.findall(
+        r'data-people-vehicle-classes-json>(.*?)</script>',
+        html,
+        re.DOTALL,
+    )
+    assert json_blocks, "bloco JSON do preset ausente"
+    for raw in json_blocks:
+        classes = json.loads(raw.strip())
+        assert set(classes) == set(PEOPLE_VEHICLE_DETECTION_CLASSES)
+
+    attr_matches = re.findall(
         r"data-people-vehicle-classes='([^']*)'",
         html,
     )
-    assert matches, "atributo data-people-vehicle-classes ausente"
-    for raw in matches:
-        classes = json.loads(raw)
-        assert set(classes) == set(PEOPLE_VEHICLE_DETECTION_CLASSES)
+    assert attr_matches
+    for raw in attr_matches:
+        assert set(json.loads(raw)) == set(PEOPLE_VEHICLE_DETECTION_CLASSES)
