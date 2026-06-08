@@ -82,9 +82,56 @@ def probe_video(path: Path) -> dict:
     }
 
 
+def _is_under(path: Path, root: Path) -> bool:
+    try:
+        path.resolve().relative_to(root.resolve())
+        return True
+    except ValueError:
+        return False
+
+
+def find_identical_in_dir(source: Path, directory: Path) -> Path | None:
+    """Retorna arquivo existente em directory com o mesmo SHA-256 do source."""
+    if not source.is_file():
+        return None
+
+    resolved_source = source.resolve()
+    resolved_dir = directory.resolve()
+    source_sha = file_sha256(resolved_source)
+    source_size = resolved_source.stat().st_size
+
+    for candidate in resolved_dir.iterdir():
+        if not candidate.is_file() or candidate.suffix.lower() != ".mp4":
+            continue
+        resolved_candidate = candidate.resolve()
+        if resolved_candidate == resolved_source:
+            return resolved_candidate
+        try:
+            if resolved_candidate.stat().st_size != source_size:
+                continue
+            if file_sha256(resolved_candidate) == source_sha:
+                return resolved_candidate
+        except OSError:
+            continue
+    return None
+
+
 def copy_to_storage(source: Path, dest_dir: Path) -> Path:
     validate_mp4(source.name)
+    if not source.is_file():
+        raise FileNotFoundError(f"Vídeo não encontrado: {source}")
+
     dest_dir.mkdir(parents=True, exist_ok=True)
+    resolved_source = source.resolve()
+    resolved_dest = dest_dir.resolve()
+
+    if _is_under(resolved_source, resolved_dest):
+        return resolved_source
+
+    existing = find_identical_in_dir(resolved_source, resolved_dest)
+    if existing is not None:
+        return existing
+
     dest = dest_dir / f"{uuid.uuid4().hex}_{source.name}"
-    shutil.copy2(source, dest)
+    shutil.copy2(resolved_source, dest)
     return dest

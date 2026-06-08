@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -20,6 +21,7 @@ class Settings(BaseSettings):
     pdf_max_thumbnails: int = 20
     pdf_compact_max_width: int = 480
     pdf_compact_jpeg_quality: int = 45
+    snapshot_jpeg_quality: int = 85
     pdf_compact_max_thumbnails: int = 0
     merge_spatial_ratio: float = 0.15
 
@@ -35,11 +37,19 @@ class Settings(BaseSettings):
     frame_cache_enabled_cpu: bool = True
     frame_cache_enabled_gpu: bool = False
     frame_cache_min_free_gb: float = 5.0
+    # Opt-in: YOLO stream+batch na lista de JPEGs do frame cache (CPU).
+    # Não afeta leitura direta do vídeo — ver docs/cpu-detection-batch.md.
+    cpu_stream_detection: bool = False
 
     generate_reports_on_complete: bool = False
     allow_cpu_fallback: bool = True
 
     progress_update_every_n_frames: int = 30
+
+    @field_validator("snapshot_jpeg_quality")
+    @classmethod
+    def _clamp_snapshot_jpeg_quality(cls, value: int) -> int:
+        return max(1, min(100, value))
 
     @property
     def sqlite_url(self) -> str:

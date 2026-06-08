@@ -128,6 +128,24 @@ def _accum_to_segments(accum: dict[tuple[int, str], dict]) -> list[TrackSegment]
     return segments
 
 
+def should_use_cpu_image_stream(
+    settings: Settings,
+    frame_paths: list[Path] | None,
+    backend: str,
+) -> bool:
+    """Usa ``model.track(source=paths, stream=True)`` no frame cache CPU (opt-in)."""
+    return (
+        settings.cpu_stream_detection
+        and backend == "cpu"
+        and bool(frame_paths)
+    )
+
+
+def image_paths_to_track_sources(frame_paths: list[Path]) -> list[str]:
+    """Converte paths do frame cache para ``source`` do Ultralytics."""
+    return [str(p) for p in frame_paths]
+
+
 def run_detection(
     video_path: Path,
     settings: Settings,
@@ -136,6 +154,10 @@ def run_detection(
     on_progress: Callable[[int, int], None] | None = None,
     allowed_classes: frozenset[str] | None = None,
 ) -> list[TrackSegment]:
+    from analisador_videos.pipeline.yolo_cache import get_yolo_model, reset_yolo_tracker
+
+    reset_yolo_tracker(get_yolo_model(settings.yolo_model))
+
     profile = profile or resolve_runtime(settings)
     if profile.backend == "cuda" and frame_paths is None:
         return _run_detection_gpu_stream(
@@ -159,6 +181,15 @@ def _run_detection_cpu_loop(
     from analisador_videos.pipeline.yolo_cache import get_yolo_model
 
     if frame_paths:
+        if should_use_cpu_image_stream(settings, frame_paths, profile.backend):
+            return _run_detection_on_images_stream(
+                frame_paths,
+                settings,
+                profile,
+                on_progress,
+                fps_hint=settings.sample_fps,
+                allowed_classes=allowed_classes,
+            )
         return _run_detection_on_images(
             frame_paths,
             settings,
@@ -323,6 +354,55 @@ def _run_detection_on_images(
         ):
             on_progress(i + 1, total_work)
 
+    return _accum_to_segments(accum)
+
+
+def _run_detection_on_images_stream(
+    frame_paths: list[Path],
+    settings: Settings,
+    profile: ComputeProfile,
+    on_progress: Callable[[int, int], None] | None,
+    fps_hint: float,
+    allowed_classes: frozenset[str] | None = None,
+) -> list[TrackSegment]:
+    from analisador_videos.pipeline.yolo_cache import get_yolo_model
+
+    model = get_yolo_model(settings.yolo_model)
+    class_names = model_class_names(model)
+    track_kw = track_classes_kwargs(allowed_classes, class_names)
+    accum: dict[tuple[int, str], dict] = {}
+    total_work = len(frame_paths)
+
+    results = model.track(
+        source=image_paths_to_track_sources(frame_paths),
+        stream=True,
+        persist=True,
+        tracker="bytetrack.yaml",
+        device="cpu",
+        batch=profile.yolo_batch_size,
+        imgsz=profile.yolo_imgsz,
+        verbose=False,
+        **track_kw,
+    )
+
+    for i, result in enumerate(results):
+        t_sec = i / fps_hint if fps_hint > 0 else float(i)
+        _process_frame_result(
+            result,
+            accum,
+            t_sec,
+            settings,
+            class_names,
+            allowed_classes,
+        )
+        if on_progress and (
+            (i + 1) % settings.progress_update_every_n_frames == 0
+            or i + 1 == total_work
+        ):
+            on_progress(i + 1, total_work)
+
+    if on_progress:
+        on_progress(total_work, total_work)
     return _accum_to_segments(accum)
 
 

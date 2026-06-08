@@ -1,7 +1,27 @@
 import logging
 from pathlib import Path
 
+from analisador_videos.config import settings
+
 logger = logging.getLogger(__name__)
+
+
+def _jpeg_imwrite_params(path: Path) -> list[int] | None:
+    if path.suffix.lower() not in {".jpg", ".jpeg"}:
+        return None
+    import cv2
+
+    return [int(cv2.IMWRITE_JPEG_QUALITY), settings.snapshot_jpeg_quality]
+
+
+def _imwrite_image(path: Path, image) -> None:
+    params = _jpeg_imwrite_params(path)
+    import cv2
+
+    if params is not None:
+        cv2.imwrite(str(path), image, params)
+    else:
+        cv2.imwrite(str(path), image)
 
 
 def clamp_seek_time_sec(time_sec: float, fps: float, frame_count: int) -> float:
@@ -55,7 +75,7 @@ def capture_snapshot(
         cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    cv2.imwrite(str(out_path), frame)
+    _imwrite_image(out_path, frame)
     return True
 
 
@@ -75,5 +95,5 @@ def make_thumbnail(snapshot_path: Path, thumb_path: Path, width: int = 320) -> b
         scale = width / w
         thumb = cv2.resize(img, (width, int(h * scale)))
     thumb_path.parent.mkdir(parents=True, exist_ok=True)
-    cv2.imwrite(str(thumb_path), thumb)
+    _imwrite_image(thumb_path, thumb)
     return True
