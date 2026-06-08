@@ -30,6 +30,8 @@ class FolderProcessRequest(BaseModel):
     batch_slug: str | None = None
     detection_classes: list[str] | None = None
     sensitive: bool = False
+    confidence_threshold: float | None = None
+    vehicle_confidence: float | None = None
 
 
 def _resolve_batch(
@@ -64,6 +66,9 @@ def _register_video(
 async def process_video(
     sync: bool = Query(False, alias="sync"),
     force: bool = Query(False),
+    sensitive: bool = Query(False),
+    confidence_threshold: float | None = Query(None, ge=0.01, le=1.0),
+    vehicle_confidence: float | None = Query(None, ge=0.01, le=1.0),
     file: UploadFile | None = File(None),
     body: FolderProcessRequest | None = Body(None),
     db: Session = Depends(get_db),
@@ -123,10 +128,27 @@ async def process_video(
         seen_video_ids.add(video.id)
 
         params_json = None
-        if body and (body.detection_classes is not None or body.sensitive):
+        req_sensitive = body.sensitive if body else sensitive
+        req_classes = body.detection_classes if body else None
+        req_conf = (
+            body.confidence_threshold if body and body.confidence_threshold is not None
+            else confidence_threshold
+        )
+        req_veh = (
+            body.vehicle_confidence if body and body.vehicle_confidence is not None
+            else vehicle_confidence
+        )
+        if (
+            req_sensitive
+            or req_classes is not None
+            or req_conf is not None
+            or req_veh is not None
+        ):
             params_json = build_detection_params_json(
-                sensitive=body.sensitive,
-                detection_classes=body.detection_classes,
+                sensitive=req_sensitive,
+                detection_classes=req_classes,
+                confidence_threshold=req_conf,
+                vehicle_confidence=req_veh,
             )
         job = create_job(db, video.id, batch_id=batch_id, params_json=params_json)
         entry = {

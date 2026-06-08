@@ -10,6 +10,11 @@ from sqlalchemy.orm import Session
 from analisador_videos.config import settings
 from analisador_videos.db.models import Artifact, Batch, Event, Video
 from analisador_videos.reports.batch_builder import build_batch_html
+from analisador_videos.reports.pdf_quality import (
+    PDF_QUALITY_COMPACT,
+    PDF_QUALITY_STANDARD,
+    pdf_report_filename,
+)
 from analisador_videos.reports.service import ensure_video_report
 from analisador_videos.util.class_labels import class_label_pt
 from analisador_videos.util.time_format import format_hms
@@ -137,7 +142,41 @@ def ensure_batch_report(db: Session, batch: Batch, fmt: str) -> Path:
     raise ValueError(f"Formato inválido: {fmt}")
 
 
-def build_batch_reports_zip(db: Session, batch: Batch) -> Path:
+def _append_video_report_entries(
+    entries: list[tuple[Path, str]],
+    db: Session,
+    video: Video,
+    *,
+    pdf_quality: str = PDF_QUALITY_COMPACT,
+) -> None:
+    for fmt in ("json", "csv"):
+        try:
+            rp = ensure_video_report(db, video, fmt)
+            entries.append((rp, f"videos/video{video.id}_{rp.name}"))
+        except Exception:
+            pass
+
+    try:
+        rp = ensure_video_report(db, video, "pdf", quality=pdf_quality)
+        entries.append((rp, f"videos/video{video.id}_{rp.name}"))
+    except Exception:
+        pass
+
+    if pdf_quality == PDF_QUALITY_COMPACT:
+        report_dir = settings.data_dir / "reports"
+        standard = report_dir / pdf_report_filename(video.id, PDF_QUALITY_STANDARD)
+        if standard.is_file():
+            entries.append(
+                (standard, f"videos/video{video.id}_{standard.name}")
+            )
+
+
+def build_batch_reports_zip(
+    db: Session,
+    batch: Batch,
+    *,
+    pdf_quality: str = PDF_QUALITY_COMPACT,
+) -> Path:
     from analisador_videos.media.zip_utils import zip_named
 
     entries: list[tuple[Path, str]] = []
@@ -145,16 +184,10 @@ def build_batch_reports_zip(db: Session, batch: Batch) -> Path:
         p = ensure_batch_report(db, batch, fmt)
         entries.append((p, f"lote/{p.name}"))
 
-    videos = _batch_videos(db, batch)
-    for v in videos:
+    for v in _batch_videos(db, batch):
         if v.status != "done":
             continue
-        for fmt in ("json", "csv", "pdf"):
-            try:
-                rp = ensure_video_report(db, v, fmt)
-                entries.append((rp, f"videos/video{v.id}_{rp.name}"))
-            except Exception:
-                pass
+        _append_video_report_entries(entries, db, v, pdf_quality=pdf_quality)
 
     out = settings.data_dir / "reports" / "batches" / f"{batch.slug}-relatorios.zip"
     if not entries:

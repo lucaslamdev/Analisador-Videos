@@ -24,6 +24,7 @@ from analisador_videos.reports.batch_exports import (
     collect_batch_supercut_paths,
     ensure_batch_report,
 )
+from analisador_videos.reports.pdf_quality import parse_pdf_quality
 
 router = APIRouter(tags=["batches"])
 
@@ -191,12 +192,20 @@ def batch_report(slug: str, format: str, db: Session = Depends(get_db)):
 
 
 @router.get("/lotes/{slug}/reports.zip")
-def batch_reports_zip(slug: str, db: Session = Depends(get_db)):
+def batch_reports_zip(
+    slug: str,
+    compact: bool = Query(
+        True,
+        description="PDF compacto nos relatórios por vídeo do ZIP (padrão)",
+    ),
+    db: Session = Depends(get_db),
+):
     batch = get_batch_by_slug(db, slug)
     if not batch:
         raise HTTPException(404, "Lote não encontrado")
+    pdf_quality = parse_pdf_quality(compact=compact)
     try:
-        path = build_batch_reports_zip(db, batch)
+        path = build_batch_reports_zip(db, batch, pdf_quality=pdf_quality)
     except ValueError as exc:
         raise HTTPException(404, str(exc)) from exc
     return FileResponse(

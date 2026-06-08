@@ -44,6 +44,7 @@
             <input id="file-upload" class="form-control" type="file" name="file" accept=".mp4" required>
           </div>
           {% set picker_id = "upload" %}
+          {% include "partials/detection_thresholds.html" %}
           {% include "partials/detection_class_picker.html" %}
           <button class="btn btn-primary w-100" type="submit">
             <i class="bi bi-play-circle me-1"></i>Enviar e processar
@@ -81,6 +82,7 @@
         {% endif %}
         <form action="/web/process-folder" method="post" class="mt-auto">
           {% set picker_id = "folder" %}
+          {% include "partials/detection_thresholds.html" %}
           {% include "partials/detection_class_picker.html" %}
           <button class="btn btn-outline-secondary w-100" type="submit">
             <i class="bi bi-collection-play me-1"></i>Processar pasta (lote)

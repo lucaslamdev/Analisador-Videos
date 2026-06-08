@@ -1,0 +1,21 @@
+{# Requer: detection_thresholds dict com confidence_threshold e vehicle_confidence #}
+<div class="detection-thresholds mb-3">
+  <label class="form-label mb-0 small fw-semibold">Limiares de confiança</label>
+  <p class="text-muted small mb-2">
+    Ajuste a sensibilidade da detecção (0.01–1.0). Valores menores tendem a detectar mais objetos.
+  </p>
+  <div class="row g-2">
+    <div class="col-sm-6">
+      <label class="form-label small mb-1" for="conf-th-{{ picker_id }}">Confiança geral</label>
+      <input type="number" class="form-control form-control-sm" name="confidence_threshold"
+             id="conf-th-{{ picker_id }}" min="0.01" max="1" step="0.01" required
+             value="{{ "%.2f"|format(detection_thresholds.confidence_threshold) }}">
+    </div>
+    <div class="col-sm-6">
+      <label class="form-label small mb-1" for="veh-th-{{ picker_id }}">Confiança veículos</label>
+      <input type="number" class="form-control form-control-sm" name="vehicle_confidence"
+             id="veh-th-{{ picker_id }}" min="0.01" max="1" step="0.01" required
+             value="{{ "%.2f"|format(detection_thresholds.vehicle_confidence) }}">
+    </div>
+  </div>
+</div>

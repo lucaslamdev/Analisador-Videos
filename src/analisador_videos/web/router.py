@@ -46,7 +46,11 @@ from analisador_videos.web.event_queries import (
 )
 from analisador_videos.pipeline.compute import health_info
 from analisador_videos.events.delete import delete_event
-from analisador_videos.jobs.detection_params import build_detection_params_json
+from analisador_videos.jobs.detection_params import (
+    build_detection_params_json,
+    parse_threshold_value,
+    thresholds_for_ui,
+)
 from analisador_videos.util.class_labels import class_label_pt
 from analisador_videos.util.detection_classes import (
     ALL_DETECTION_CLASSES,
@@ -106,6 +110,28 @@ def _class_picker_context(params_json: str | None = None) -> dict:
     }
 
 
+def _threshold_picker_context(params_json: str | None = None) -> dict:
+    return {"detection_thresholds": thresholds_for_ui(params_json)}
+
+
+def _parse_form_thresholds(
+    confidence_threshold: str | None,
+    vehicle_confidence: str | None,
+    *,
+    params_json: str | None = None,
+) -> tuple[float, float]:
+    defaults = thresholds_for_ui(params_json)
+    if confidence_threshold in (None, ""):
+        conf = defaults["confidence_threshold"]
+    else:
+        conf = parse_threshold_value(confidence_threshold, field="Confiança geral")
+    if vehicle_confidence in (None, ""):
+        veh = defaults["vehicle_confidence"]
+    else:
+        veh = parse_threshold_value(vehicle_confidence, field="Confiança veículos")
+    return conf, veh
+
+
 def _batch_map(db: Session, jobs: list[Job]) -> dict[int, Batch]:
     ids = {j.batch_id for j in jobs if j.batch_id}
     if not ids:
@@ -144,6 +170,7 @@ def index(request: Request, db: Session = Depends(get_db)):
                 "folder_path": folder_path,
                 "disk_estimate": disk_estimate,
                 **_class_picker_context(),
+                **_threshold_picker_context(),
             }
         ),
     )
@@ -204,6 +231,7 @@ def job_detail_page(job_id: str, request: Request, db: Session = Depends(get_db)
                 "retry_error": retry_error,
                 "event_count": event_count,
                 **_class_picker_context(job.params_json),
+                **_threshold_picker_context(job.params_json),
             }
         ),
     )
@@ -373,8 +401,11 @@ async def web_reprocess_job(
     keep_batch: str | None = Form("1"),
     detection_classes: list[str] = Form(default=[]),
     use_class_picker: str | None = Form(None),
+    confidence_threshold: str | None = Form(None),
+    vehicle_confidence: str | None = Form(None),
     db: Session = Depends(get_db),
 ):
+    parent_job = db.get(Job, job_id)
     is_sensitive = sensitive in ("1", "true", "on")
     keep = keep_batch not in ("0", "false", "off")
     classes_override = None
@@ -387,12 +418,25 @@ async def web_reprocess_job(
                 status_code=303,
             )
     try:
+        conf, veh = _parse_form_thresholds(
+            confidence_threshold,
+            vehicle_confidence,
+            params_json=parent_job.params_json if parent_job else None,
+        )
+    except ValueError as exc:
+        return RedirectResponse(
+            f"/jobs/{job_id}?retry_error={quote(str(exc))}",
+            status_code=303,
+        )
+    try:
         new_job = create_reprocess_job(
             db,
             job_id,
             sensitive=is_sensitive,
             keep_batch=keep,
             detection_classes=classes_override,
+            confidence_threshold=conf,
+            vehicle_confidence=veh,
         )
     except ValueError as exc:
         return RedirectResponse(
@@ -457,10 +501,19 @@ async def web_upload(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     detection_classes: list[str] = Form(default=[]),
+    confidence_threshold: str | None = Form(None),
+    vehicle_confidence: str | None = Form(None),
     db: Session = Depends(get_db),
 ):
     try:
         classes = normalize_form_classes(detection_classes)
+    except ValueError as exc:
+        return RedirectResponse(
+            f"/?retry_error={quote(str(exc))}",
+            status_code=303,
+        )
+    try:
+        conf, veh = _parse_form_thresholds(confidence_threshold, vehicle_confidence)
     except ValueError as exc:
         return RedirectResponse(
             f"/?retry_error={quote(str(exc))}",
@@ -478,7 +531,11 @@ async def web_upload(
         file.filename or dest.name,
         reimport_for_processing=True,
     )
-    params_json = build_detection_params_json(detection_classes=classes)
+    params_json = build_detection_params_json(
+        detection_classes=classes,
+        confidence_threshold=conf,
+        vehicle_confidence=veh,
+    )
     job = create_job(db, video.id, params_json=params_json)
     background_tasks.add_task(run_async, job.id)
     return RedirectResponse("/jobs", status_code=303)
@@ -488,6 +545,8 @@ async def web_upload(
 async def web_process_folder(
     background_tasks: BackgroundTasks,
     detection_classes: list[str] = Form(default=[]),
+    confidence_threshold: str | None = Form(None),
+    vehicle_confidence: str | None = Form(None),
     db: Session = Depends(get_db),
 ):
     try:
@@ -497,7 +556,18 @@ async def web_process_folder(
             f"/?retry_error={quote(str(exc))}",
             status_code=303,
         )
-    params_json = build_detection_params_json(detection_classes=classes)
+    try:
+        conf, veh = _parse_form_thresholds(confidence_threshold, vehicle_confidence)
+    except ValueError as exc:
+        return RedirectResponse(
+            f"/?retry_error={quote(str(exc))}",
+            status_code=303,
+        )
+    params_json = build_detection_params_json(
+        detection_classes=classes,
+        confidence_threshold=conf,
+        vehicle_confidence=veh,
+    )
     input_dir = settings.videos_input_dir.resolve()
     paths = scan_folder(settings.videos_input_dir)
     if not paths:

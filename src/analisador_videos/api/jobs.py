@@ -55,6 +55,12 @@ async def reprocess_job_endpoint(
     detection_class: list[str] = Query(
         default=[], alias="class", description="Classes YOLO a detectar (vazio = todas)"
     ),
+    confidence_threshold: float | None = Query(
+        None, ge=0.01, le=1.0, description="Limiar geral de confiança"
+    ),
+    vehicle_confidence: float | None = Query(
+        None, ge=0.01, le=1.0, description="Limiar de confiança para veículos"
+    ),
     db: Session = Depends(get_db),
 ):
     """Reprocessar um único job (done/failed/cancelled), fora do fluxo do lote inteiro."""
@@ -66,6 +72,8 @@ async def reprocess_job_endpoint(
             sensitive=sensitive,
             keep_batch=keep_batch,
             detection_classes=classes,
+            confidence_threshold=confidence_threshold,
+            vehicle_confidence=vehicle_confidence,
         )
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc

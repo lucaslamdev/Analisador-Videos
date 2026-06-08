@@ -58,6 +58,7 @@
           <form action="/web/jobs/{{ job.id }}/reprocess" method="post">
             <input type="hidden" name="use_class_picker" value="1">
             {% set picker_id = "reprocess" %}
+            {% include "partials/detection_thresholds.html" %}
             {% include "partials/detection_class_picker.html" %}
             <div class="form-check form-check-sm mb-2">
               <input class="form-check-input" type="checkbox" name="keep_batch" value="0" id="keep-batch-off">

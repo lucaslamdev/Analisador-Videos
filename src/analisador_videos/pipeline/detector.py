@@ -136,7 +136,8 @@ def _run_detection_cpu_loop(
     allowed_classes: frozenset[str] | None = None,
 ) -> list[TrackSegment]:
     import cv2
-    from ultralytics import YOLO
+
+    from analisador_videos.pipeline.yolo_cache import get_yolo_model
 
     if frame_paths:
         return _run_detection_on_images(
@@ -158,7 +159,7 @@ def _run_detection_cpu_loop(
 
     indices = set(frame_indices(fps, total_frames, settings.sample_fps))
     total_work = len(indices)
-    model = YOLO(settings.yolo_model)
+    model = get_yolo_model(settings.yolo_model)
     class_names = model_class_names(model)
     accum: dict[tuple[int, str], dict] = {}
     done = 0
@@ -205,7 +206,8 @@ def _run_detection_gpu_stream(
     allowed_classes: frozenset[str] | None = None,
 ) -> list[TrackSegment]:
     import cv2
-    from ultralytics import YOLO
+
+    from analisador_videos.pipeline.yolo_cache import get_yolo_model
 
     cap = cv2.VideoCapture(str(video_path))
     fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
@@ -214,7 +216,7 @@ def _run_detection_gpu_stream(
 
     stride = vid_stride_for_sample(fps, settings.sample_fps)
     total_work = expected_sample_count(fps, total_frames, settings.sample_fps)
-    model = YOLO(settings.yolo_model)
+    model = get_yolo_model(settings.yolo_model)
     class_names = model_class_names(model)
     accum: dict[tuple[int, str], dict] = {}
     done = 0
@@ -261,9 +263,10 @@ def _run_detection_on_images(
     allowed_classes: frozenset[str] | None = None,
 ) -> list[TrackSegment]:
     import cv2
-    from ultralytics import YOLO
 
-    model = YOLO(settings.yolo_model)
+    from analisador_videos.pipeline.yolo_cache import get_yolo_model
+
+    model = get_yolo_model(settings.yolo_model)
     class_names = model_class_names(model)
     accum: dict[tuple[int, str], dict] = {}
     total_work = len(frame_paths)

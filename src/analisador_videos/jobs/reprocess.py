@@ -34,6 +34,8 @@ def create_reprocess_job(
     sensitive: bool = False,
     keep_batch: bool = True,
     detection_classes: list[str] | None = None,
+    confidence_threshold: float | None = None,
+    vehicle_confidence: float | None = None,
 ) -> Job:
     """
     Cria novo job para o mesmo vídeo, sem reprocessar o lote inteiro.
@@ -78,6 +80,8 @@ def create_reprocess_job(
         base_params,
         sensitive=sensitive,
         detection_classes=detection_classes,
+        confidence_threshold=confidence_threshold,
+        vehicle_confidence=vehicle_confidence,
     )
     params = json.loads(params_json)
     params["reprocess_of"] = parent.id

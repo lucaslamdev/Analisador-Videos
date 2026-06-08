@@ -127,14 +127,15 @@ def annotate_video_with_detections(
 ) -> Path:
     """YOLO frame a frame; modo sensível usa limiares mais baixos (~22% pessoa)."""
     import cv2
-    from ultralytics import YOLO
+
+    from analisador_videos.pipeline.yolo_cache import get_yolo_model
 
     mode = mode or AnnotateOptions(sensitive=False)
 
     if not source_path.is_file():
         raise ValueError(f"Vídeo de entrada não encontrado: {source_path}")
 
-    model = YOLO(settings.yolo_model)
+    model = get_yolo_model(settings.yolo_model)
     class_names = model_class_names(model)
     device = 0 if profile.backend == "cuda" else "cpu"
 

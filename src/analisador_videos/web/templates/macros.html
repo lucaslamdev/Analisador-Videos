@@ -180,7 +180,10 @@
   <a class="btn btn-outline-primary btn-sm" href="/lotes/{{ batch.slug }}/reports/html" target="_blank">HTML</a>
   <a class="btn btn-outline-primary btn-sm" href="/lotes/{{ batch.slug }}/reports/json">JSON</a>
   <a class="btn btn-outline-primary btn-sm" href="/lotes/{{ batch.slug }}/reports/csv">CSV</a>
-  <a class="btn btn-outline-primary btn-sm" href="/lotes/{{ batch.slug }}/reports.zip">ZIP relatórios</a>
+  <a class="btn btn-outline-primary btn-sm" href="/lotes/{{ batch.slug }}/reports.zip"
+     title="ZIP com HTML/JSON/CSV do lote e relatórios por vídeo (PDF compacto por padrão)">ZIP relatórios</a>
+  <a class="btn btn-outline-secondary btn-sm" href="/lotes/{{ batch.slug }}/reports.zip?compact=false"
+     title="ZIP com PDF padrão (imagens em alta resolução) nos relatórios por vídeo">ZIP PDF padrão</a>
   <a class="btn btn-outline-secondary btn-sm" href="/lotes/{{ batch.slug }}/supercuts.zip">ZIP supercuts</a>
 </div>
 {% endmacro %}
