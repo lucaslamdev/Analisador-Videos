@@ -51,6 +51,10 @@ from analisador_videos.jobs.detection_params import (
     parse_threshold_value,
     thresholds_for_ui,
 )
+from analisador_videos.jobs.stage_timings import (
+    pipeline_total_sec_for_ui,
+    stage_timings_for_ui,
+)
 from analisador_videos.util.class_labels import class_label_pt
 from analisador_videos.util.detection_classes import (
     ALL_DETECTION_CLASSES,
@@ -112,6 +116,17 @@ def _class_picker_context(params_json: str | None = None) -> dict:
 
 def _threshold_picker_context(params_json: str | None = None) -> dict:
     return {"detection_thresholds": thresholds_for_ui(params_json)}
+
+
+def _stage_timings_context(params_json: str | None = None) -> dict:
+    rows = stage_timings_for_ui(params_json)
+    if not rows:
+        return {"stage_timings": [], "pipeline_total_display": None}
+    total = pipeline_total_sec_for_ui(params_json)
+    total_display = None
+    if total is not None:
+        total_display = f"{total:.1f} s" if total < 60 else format_hms(total)
+    return {"stage_timings": rows, "pipeline_total_display": total_display}
 
 
 def _parse_form_thresholds(
@@ -232,6 +247,7 @@ def job_detail_page(job_id: str, request: Request, db: Session = Depends(get_db)
                 "event_count": event_count,
                 **_class_picker_context(job.params_json),
                 **_threshold_picker_context(job.params_json),
+                **_stage_timings_context(job.params_json),
             }
         ),
     )

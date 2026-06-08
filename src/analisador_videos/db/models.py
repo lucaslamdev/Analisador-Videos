@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import DateTime, Float, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -50,6 +50,12 @@ class Video(Base):
 
 class Job(Base):
     __tablename__ = "jobs"
+    __table_args__ = (
+        Index("ix_jobs_batch_id", "batch_id"),
+        Index("ix_jobs_status", "status"),
+        Index("ix_jobs_video_id", "video_id"),
+        Index("ix_jobs_batch_id_created_at", "batch_id", "created_at"),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     video_id: Mapped[int] = mapped_column(ForeignKey("videos.id"), nullable=False)
@@ -93,6 +99,12 @@ class Track(Base):
 
 class Event(Base):
     __tablename__ = "events"
+    __table_args__ = (
+        Index("ix_events_video_id", "video_id"),
+        Index("ix_events_class_name", "class_name"),
+        Index("ix_events_start_time_sec", "start_time_sec"),
+        Index("ix_events_video_id_start_time_sec", "video_id", "start_time_sec"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     video_id: Mapped[int] = mapped_column(ForeignKey("videos.id"), nullable=False)

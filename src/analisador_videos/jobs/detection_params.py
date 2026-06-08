@@ -3,6 +3,7 @@
 import json
 
 from analisador_videos.config import Settings, settings
+from analisador_videos.jobs.stage_timings import strip_runtime_params
 from analisador_videos.util.detection_classes import classes_for_storage
 
 THRESHOLD_MIN = 0.01
@@ -77,7 +78,7 @@ def build_detection_params_json(
     - Sem valor explícito e `sensitive=True`: usa limiares sensíveis globais.
     - Sem valor explícito e `sensitive=False`: mantém base_params ou padrão global.
     """
-    params = dict(base_params or {})
+    params = strip_runtime_params(dict(base_params or {}))
     params.update(
         {
             "event_merge_gap_sec": settings.event_merge_gap_sec,

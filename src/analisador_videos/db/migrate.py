@@ -43,3 +43,16 @@ def run_migrations() -> None:
     add_column("jobs", "analysis_version", "analysis_version INTEGER DEFAULT 1")
     add_column("batches", "parent_batch_id", "parent_batch_id INTEGER")
     add_column("batches", "analysis_version", "analysis_version INTEGER DEFAULT 1")
+
+    def ensure_index(name: str, table: str, columns: str) -> None:
+        with eng.begin() as conn:
+            conn.execute(text(f"CREATE INDEX IF NOT EXISTS {name} ON {table} ({columns})"))
+
+    ensure_index("ix_events_video_id", "events", "video_id")
+    ensure_index("ix_events_class_name", "events", "class_name")
+    ensure_index("ix_events_start_time_sec", "events", "start_time_sec")
+    ensure_index("ix_events_video_id_start_time_sec", "events", "video_id, start_time_sec")
+    ensure_index("ix_jobs_batch_id", "jobs", "batch_id")
+    ensure_index("ix_jobs_status", "jobs", "status")
+    ensure_index("ix_jobs_video_id", "jobs", "video_id")
+    ensure_index("ix_jobs_batch_id_created_at", "jobs", "batch_id, created_at")

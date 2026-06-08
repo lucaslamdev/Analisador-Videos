@@ -4,7 +4,27 @@ from analisador_videos.config import settings
 from analisador_videos.db import database
 from analisador_videos.db.database import init_engine
 from analisador_videos.db.init_db import create_tables
+from analisador_videos.db.migrate import run_migrations
 from analisador_videos.db.models import Batch, Video
+
+EXPECTED_EVENT_INDEXES = {
+    "ix_events_video_id",
+    "ix_events_class_name",
+    "ix_events_start_time_sec",
+    "ix_events_video_id_start_time_sec",
+}
+
+EXPECTED_JOB_INDEXES = {
+    "ix_jobs_batch_id",
+    "ix_jobs_status",
+    "ix_jobs_video_id",
+    "ix_jobs_batch_id_created_at",
+}
+
+
+def _table_index_names(conn, table: str) -> set[str]:
+    rows = conn.execute(text(f"PRAGMA index_list('{table}')")).fetchall()
+    return {row[1] for row in rows}
 
 
 def test_sqlite_wal_mode(tmp_path, monkeypatch):
@@ -52,3 +72,27 @@ def test_batch_video_relation(tmp_path, monkeypatch):
         db.add(v)
         db.commit()
         assert v.batch_id == batch.id
+
+
+def test_sqlite_indexes_created(tmp_path, monkeypatch):
+    monkeypatch.setattr(settings, "data_dir", tmp_path)
+    init_engine()
+    create_tables()
+    with database.engine.connect() as conn:
+        event_indexes = _table_index_names(conn, "events")
+        job_indexes = _table_index_names(conn, "jobs")
+    assert EXPECTED_EVENT_INDEXES <= event_indexes
+    assert EXPECTED_JOB_INDEXES <= job_indexes
+
+
+def test_sqlite_indexes_migration_idempotent(tmp_path, monkeypatch):
+    monkeypatch.setattr(settings, "data_dir", tmp_path)
+    init_engine()
+    create_tables()
+    run_migrations()
+    run_migrations()
+    with database.engine.connect() as conn:
+        event_indexes = _table_index_names(conn, "events")
+        job_indexes = _table_index_names(conn, "jobs")
+    assert EXPECTED_EVENT_INDEXES <= event_indexes
+    assert EXPECTED_JOB_INDEXES <= job_indexes

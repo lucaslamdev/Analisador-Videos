@@ -19,6 +19,38 @@
 </div>
 {% endif %}
 
+{% if stage_timings %}
+<div class="card card-app mb-4">
+  <div class="card-header">Tempo por etapa</div>
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-sm table-striped mb-0 align-middle">
+        <thead>
+          <tr>
+            <th>Etapa</th>
+            <th class="text-end">Duração</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in stage_timings %}
+          <tr>
+            <td>{{ row.label }}</td>
+            <td class="text-end font-monospace small">{{ row.display }}</td>
+          </tr>
+          {% endfor %}
+          {% if pipeline_total_display %}
+          <tr class="table-light fw-semibold">
+            <td>Total do pipeline</td>
+            <td class="text-end font-monospace small">{{ pipeline_total_display }}</td>
+          </tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endif %}
+
 <div class="row g-4">
   <div class="col-lg-5">
     <div class="card card-app">

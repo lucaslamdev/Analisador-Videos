@@ -38,6 +38,25 @@ def model_class_names(model) -> dict[int, str]:
     return {i: str(name) for i, name in enumerate(raw)}
 
 
+def yolo_track_class_ids(
+    allowed_classes: frozenset[str],
+    class_names: dict[int, str],
+) -> list[int]:
+    """Converte nomes permitidos em IDs YOLO para ``model.track(classes=...)``."""
+    name_to_id = {name: class_id for class_id, name in class_names.items()}
+    return sorted(name_to_id[name] for name in allowed_classes if name in name_to_id)
+
+
+def track_classes_kwargs(
+    allowed_classes: frozenset[str] | None,
+    class_names: dict[int, str],
+) -> dict[str, list[int]]:
+    """Kwargs extras para ``model.track`` quando há filtro por classe."""
+    if allowed_classes is None:
+        return {}
+    return {"classes": yolo_track_class_ids(allowed_classes, class_names)}
+
+
 def _conf_threshold(settings: Settings, class_name: str) -> float:
     if class_name in VEHICLE_CLASSES:
         return settings.vehicle_confidence
@@ -161,6 +180,7 @@ def _run_detection_cpu_loop(
     total_work = len(indices)
     model = get_yolo_model(settings.yolo_model)
     class_names = model_class_names(model)
+    track_kw = track_classes_kwargs(allowed_classes, class_names)
     accum: dict[tuple[int, str], dict] = {}
     done = 0
 
@@ -179,6 +199,7 @@ def _run_detection_cpu_loop(
                     device=profile.backend,
                     verbose=False,
                     imgsz=profile.yolo_imgsz,
+                    **track_kw,
                 ),
                 accum,
                 frame_idx / fps if fps > 0 else 0.0,
@@ -218,6 +239,7 @@ def _run_detection_gpu_stream(
     total_work = expected_sample_count(fps, total_frames, settings.sample_fps)
     model = get_yolo_model(settings.yolo_model)
     class_names = model_class_names(model)
+    track_kw = track_classes_kwargs(allowed_classes, class_names)
     accum: dict[tuple[int, str], dict] = {}
     done = 0
 
@@ -233,6 +255,7 @@ def _run_detection_gpu_stream(
         imgsz=profile.yolo_imgsz,
         verbose=False,
         conf=min(settings.confidence_threshold, settings.vehicle_confidence),
+        **track_kw,
     )
 
     for result in results:
@@ -268,6 +291,7 @@ def _run_detection_on_images(
 
     model = get_yolo_model(settings.yolo_model)
     class_names = model_class_names(model)
+    track_kw = track_classes_kwargs(allowed_classes, class_names)
     accum: dict[tuple[int, str], dict] = {}
     total_work = len(frame_paths)
 
@@ -285,6 +309,7 @@ def _run_detection_on_images(
                 verbose=False,
                 imgsz=profile.yolo_imgsz,
                 half=profile.yolo_half if profile.backend == "cuda" else False,
+                **track_kw,
             ),
             accum,
             t_sec,

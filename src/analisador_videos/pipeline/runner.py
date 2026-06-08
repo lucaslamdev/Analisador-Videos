@@ -17,6 +17,7 @@ from analisador_videos.jobs.cancel import (
     is_job_cancelled,
 )
 from analisador_videos.jobs.detection_params import detection_settings_for_job
+from analisador_videos.jobs.stage_timings import PipelineStageTimer, persist_stage_timings
 from analisador_videos.util.detection_classes import parse_detection_classes
 from analisador_videos.jobs.progress import update_job
 from analisador_videos.media.clips import clip_time_range, extract_clip
@@ -189,214 +190,233 @@ def _run_pipeline(
 ) -> list[str]:
     cfg = cfg or detection_settings_for_job(job.params_json)
     job_id = job.id
-
-    ensure_not_cancelled(db, job_id)
-    update_job(db, job_id, stage="ingest", progress_pct=5)
-    meta = probe_video(video_path)
-    video.duration_sec = meta["duration_sec"]
-    video.fps_source = meta["fps_source"]
-    video.width = meta["width"]
-    video.height = meta["height"]
-    fps = video.fps_source or 30.0
-    total_frames = int(meta["frame_count"])
-    frames_total = expected_sample_count(fps, total_frames, cfg.sample_fps)
-    update_job(db, job_id, frames_total=frames_total, frames_done=0)
-    db.commit()
-
-    frame_paths: list[Path] | None = None
-    if profile.use_frame_cache:
-        check_disk_space(cfg.data_dir, cfg.frame_cache_min_free_gb)
-        update_job(db, job_id, stage="extract", progress_pct=8)
-        frame_paths = extract_sample_frames(
-            video_path, cache_dir, cfg.sample_fps
-        )
-        frames_total = len(frame_paths)
-        update_job(db, job_id, frames_total=frames_total)
-        db.commit()
-
-    def on_detect_progress(done: int, total: int) -> None:
-        if done % max(cfg.progress_update_every_n_frames, 1) == 0 or done >= total:
-            ensure_not_cancelled(db, job_id)
-        pct = 5 + int((done / max(total, 1)) * 65)
-        update_job(
-            db,
-            job_id,
-            stage="detect",
-            progress_pct=pct,
-            frames_done=done,
-            frames_total=total,
-        )
-
-    update_job(db, job_id, stage="detect", progress_pct=10)
-    allowed_classes = parse_detection_classes(job.params_json)
-    segments = run_detection(
-        video_path,
-        cfg,
-        profile=profile,
-        frame_paths=frame_paths,
-        on_progress=on_detect_progress,
-        allowed_classes=allowed_classes,
-    )
-
-    db.query(Track).filter(Track.video_id == video.id).delete()
-    for seg in segments:
-        db.add(
-            Track(
-                video_id=video.id,
-                track_id=seg.track_id,
-                class_name=seg.class_name,
-                start_frame=0,
-                end_frame=0,
-                start_time_sec=seg.start_time_sec,
-                end_time_sec=seg.end_time_sec,
-                avg_confidence=seg.avg_confidence,
-                bbox_json=bbox_to_json(seg.best_bbox),
-            )
-        )
-    db.commit()
-
-    ensure_not_cancelled(db, job_id)
-    update_job(db, job_id, stage="merge", progress_pct=72)
-    diag = frame_diagonal(video.width or 0, video.height or 0)
-    merged = merge_tracks(
-        segments,
-        gap_sec=cfg.event_merge_gap_sec,
-        frame_diag=diag,
-        spatial_ratio=cfg.merge_spatial_ratio,
-    )
-    db.query(Event).filter(Event.video_id == video.id).delete()
-    duration = video.duration_sec or 0.0
-    event_rows: list[Event] = []
-    for m in merged:
-        clip_start, clip_end = clip_time_range(
-            m.start_time_sec,
-            m.end_time_sec,
-            cfg.clip_padding_sec,
-            duration,
-        )
-        det_t = m.detection_time_sec if m.detection_time_sec is not None else m.start_time_sec
-        event_rows.append(
-            Event(
-                video_id=video.id,
-                class_name=m.class_name,
-                start_time_sec=clip_start,
-                end_time_sec=clip_end,
-                start_time_raw_sec=m.start_time_sec,
-                end_time_raw_sec=m.end_time_sec,
-                detection_time_sec=det_t,
-                merged_track_ids=json.dumps(m.merged_track_ids),
-                avg_confidence=m.avg_confidence,
-                bbox_json=bbox_to_json(m.best_bbox),
-            )
-        )
-    db.add_all(event_rows)
-    db.commit()
-
-    events = list(
-        db.scalars(
-            select(Event).where(Event.video_id == video.id).order_by(Event.start_time_sec)
-        )
-    )
-    snap_dir = settings.data_dir / "snapshots"
-    clip_dir = settings.data_dir / "clips"
-    thumb_dir = settings.data_dir / "snapshots" / "thumbs"
-    total_ev = max(len(events), 1)
+    timer = PipelineStageTimer()
     media_warnings: list[str] = []
 
-    for i, event in enumerate(events):
+    try:
         ensure_not_cancelled(db, job_id)
-        snap_path = snap_dir / f"video{video.id}_event{event.id}.jpg"
-        thumb_path = thumb_dir / f"video{video.id}_event{event.id}_thumb.jpg"
-        snap_start = snap_dir / f"video{video.id}_event{event.id}_start.jpg"
-        thumb_start = thumb_dir / f"video{video.id}_event{event.id}_start_thumb.jpg"
-        snap_end = snap_dir / f"video{video.id}_event{event.id}_end.jpg"
-        thumb_end = thumb_dir / f"video{video.id}_event{event.id}_end_thumb.jpg"
-        clip_path = clip_dir / f"video{video.id}_event{event.id}.mp4"
-        bbox = None
-        if event.bbox_json:
-            bbox = tuple(json.loads(event.bbox_json))
-        t_cap = event.detection_time_sec or event.start_time_raw_sec
-        sp, tp = _assign_snapshot_pair(
-            video_path,
-            t_cap,
-            snap_path,
-            thumb_path,
-            bbox,
-            media_warnings,
-            event_id=event.id,
-            label="detecção",
-        )
-        event.snapshot_path = sp
-        event.thumbnail_path = tp
-        ss, ts = _assign_snapshot_pair(
-            video_path,
-            event.start_time_raw_sec,
-            snap_start,
-            thumb_start,
-            bbox,
-            media_warnings,
-            event_id=event.id,
-            label="início",
-        )
-        event.interval_start_snapshot_path = ss
-        event.interval_start_thumbnail_path = ts
-        end_snap_t = (
-            event.end_time_raw_sec
-            if event.end_time_raw_sec is not None
-            else event.end_time_sec
-        )
-        se, te = _assign_snapshot_pair(
-            video_path,
-            end_snap_t,
-            snap_end,
-            thumb_end,
-            bbox,
-            media_warnings,
-            event_id=event.id,
-            label="fim",
-        )
-        event.interval_end_snapshot_path = se
-        event.interval_end_thumbnail_path = te
-        try:
-            extract_clip(
-                video_path, event.start_time_sec, event.end_time_sec, clip_path
-            )
-            event.clip_path = clip_path.as_posix()
-        except Exception as exc:
-            media_warnings.append(
-                f"Evento {event.id} (clipe {event.start_time_sec:.2f}s–"
-                f"{event.end_time_sec:.2f}s): {exc}"
-            )
-            logger.warning("Clipe ignorado evento %s: %s", event.id, exc)
-        pct = 75 + int(((i + 1) / total_ev) * 20)
-        update_job(db, job_id, stage="media", progress_pct=pct)
-    db.commit()
-
-    clip_paths = [Path(e.clip_path) for e in events if e.clip_path]
-    if clip_paths:
-        supercut_path = settings.data_dir / "supercuts" / f"video{video.id}_full.mp4"
-        try:
-            build_supercut(clip_paths, supercut_path)
-            db.add(
-                Artifact(
-                    video_id=video.id,
-                    type="supercut_full",
-                    class_filter=None,
-                    path=str(supercut_path),
-                )
-            )
+        with timer.stage("ingest"):
+            update_job(db, job_id, stage="ingest", progress_pct=5)
+            meta = probe_video(video_path)
+            video.duration_sec = meta["duration_sec"]
+            video.fps_source = meta["fps_source"]
+            video.width = meta["width"]
+            video.height = meta["height"]
+            fps = video.fps_source or 30.0
+            total_frames = int(meta["frame_count"])
+            frames_total = expected_sample_count(fps, total_frames, cfg.sample_fps)
+            update_job(db, job_id, frames_total=frames_total, frames_done=0)
             db.commit()
-        except Exception as exc:
-            media_warnings.append(f"Supercut: {exc}")
-            logger.warning("Supercut ignorado vídeo %s: %s", video.id, exc)
 
-    if cfg.generate_reports_on_complete:
-        update_job(db, job_id, stage="reports", progress_pct=95)
-        try:
-            _write_reports(db, job, video, events)
-        except Exception as exc:
-            media_warnings.append(f"Relatórios automáticos: {exc}")
-            logger.warning("Relatórios on-complete falharam: %s", exc)
+        frame_paths: list[Path] | None = None
+        if profile.use_frame_cache:
+            with timer.stage("extract"):
+                check_disk_space(cfg.data_dir, cfg.frame_cache_min_free_gb)
+                update_job(db, job_id, stage="extract", progress_pct=8)
+                frame_paths = extract_sample_frames(
+                    video_path, cache_dir, cfg.sample_fps
+                )
+                frames_total = len(frame_paths)
+                update_job(db, job_id, frames_total=frames_total)
+                db.commit()
+
+        def on_detect_progress(done: int, total: int) -> None:
+            if done % max(cfg.progress_update_every_n_frames, 1) == 0 or done >= total:
+                ensure_not_cancelled(db, job_id)
+            pct = 5 + int((done / max(total, 1)) * 65)
+            update_job(
+                db,
+                job_id,
+                stage="detect",
+                progress_pct=pct,
+                frames_done=done,
+                frames_total=total,
+            )
+
+        with timer.stage("detect"):
+            update_job(db, job_id, stage="detect", progress_pct=10)
+            allowed_classes = parse_detection_classes(job.params_json)
+            segments = run_detection(
+                video_path,
+                cfg,
+                profile=profile,
+                frame_paths=frame_paths,
+                on_progress=on_detect_progress,
+                allowed_classes=allowed_classes,
+            )
+
+            db.query(Track).filter(Track.video_id == video.id).delete()
+            for seg in segments:
+                db.add(
+                    Track(
+                        video_id=video.id,
+                        track_id=seg.track_id,
+                        class_name=seg.class_name,
+                        start_frame=0,
+                        end_frame=0,
+                        start_time_sec=seg.start_time_sec,
+                        end_time_sec=seg.end_time_sec,
+                        avg_confidence=seg.avg_confidence,
+                        bbox_json=bbox_to_json(seg.best_bbox),
+                    )
+                )
+            db.commit()
+
+        ensure_not_cancelled(db, job_id)
+        with timer.stage("merge"):
+            update_job(db, job_id, stage="merge", progress_pct=72)
+            diag = frame_diagonal(video.width or 0, video.height or 0)
+            merged = merge_tracks(
+                segments,
+                gap_sec=cfg.event_merge_gap_sec,
+                frame_diag=diag,
+                spatial_ratio=cfg.merge_spatial_ratio,
+            )
+            db.query(Event).filter(Event.video_id == video.id).delete()
+            duration = video.duration_sec or 0.0
+            event_rows: list[Event] = []
+            for m in merged:
+                clip_start, clip_end = clip_time_range(
+                    m.start_time_sec,
+                    m.end_time_sec,
+                    cfg.clip_padding_sec,
+                    duration,
+                )
+                det_t = (
+                    m.detection_time_sec
+                    if m.detection_time_sec is not None
+                    else m.start_time_sec
+                )
+                event_rows.append(
+                    Event(
+                        video_id=video.id,
+                        class_name=m.class_name,
+                        start_time_sec=clip_start,
+                        end_time_sec=clip_end,
+                        start_time_raw_sec=m.start_time_sec,
+                        end_time_raw_sec=m.end_time_sec,
+                        detection_time_sec=det_t,
+                        merged_track_ids=json.dumps(m.merged_track_ids),
+                        avg_confidence=m.avg_confidence,
+                        bbox_json=bbox_to_json(m.best_bbox),
+                    )
+                )
+            db.add_all(event_rows)
+            db.commit()
+
+        events = list(
+            db.scalars(
+                select(Event)
+                .where(Event.video_id == video.id)
+                .order_by(Event.start_time_sec)
+            )
+        )
+        snap_dir = settings.data_dir / "snapshots"
+        clip_dir = settings.data_dir / "clips"
+        thumb_dir = settings.data_dir / "snapshots" / "thumbs"
+        total_ev = max(len(events), 1)
+
+        with timer.stage("media"):
+            for i, event in enumerate(events):
+                ensure_not_cancelled(db, job_id)
+                snap_path = snap_dir / f"video{video.id}_event{event.id}.jpg"
+                thumb_path = thumb_dir / f"video{video.id}_event{event.id}_thumb.jpg"
+                snap_start = snap_dir / f"video{video.id}_event{event.id}_start.jpg"
+                thumb_start = thumb_dir / f"video{video.id}_event{event.id}_start_thumb.jpg"
+                snap_end = snap_dir / f"video{video.id}_event{event.id}_end.jpg"
+                thumb_end = thumb_dir / f"video{video.id}_event{event.id}_end_thumb.jpg"
+                clip_path = clip_dir / f"video{video.id}_event{event.id}.mp4"
+                bbox = None
+                if event.bbox_json:
+                    bbox = tuple(json.loads(event.bbox_json))
+                t_cap = event.detection_time_sec or event.start_time_raw_sec
+                sp, tp = _assign_snapshot_pair(
+                    video_path,
+                    t_cap,
+                    snap_path,
+                    thumb_path,
+                    bbox,
+                    media_warnings,
+                    event_id=event.id,
+                    label="detecção",
+                )
+                event.snapshot_path = sp
+                event.thumbnail_path = tp
+                ss, ts = _assign_snapshot_pair(
+                    video_path,
+                    event.start_time_raw_sec,
+                    snap_start,
+                    thumb_start,
+                    bbox,
+                    media_warnings,
+                    event_id=event.id,
+                    label="início",
+                )
+                event.interval_start_snapshot_path = ss
+                event.interval_start_thumbnail_path = ts
+                end_snap_t = (
+                    event.end_time_raw_sec
+                    if event.end_time_raw_sec is not None
+                    else event.end_time_sec
+                )
+                se, te = _assign_snapshot_pair(
+                    video_path,
+                    end_snap_t,
+                    snap_end,
+                    thumb_end,
+                    bbox,
+                    media_warnings,
+                    event_id=event.id,
+                    label="fim",
+                )
+                event.interval_end_snapshot_path = se
+                event.interval_end_thumbnail_path = te
+                try:
+                    extract_clip(
+                        video_path, event.start_time_sec, event.end_time_sec, clip_path
+                    )
+                    event.clip_path = clip_path.as_posix()
+                except Exception as exc:
+                    media_warnings.append(
+                        f"Evento {event.id} (clipe {event.start_time_sec:.2f}s–"
+                        f"{event.end_time_sec:.2f}s): {exc}"
+                    )
+                    logger.warning("Clipe ignorado evento %s: %s", event.id, exc)
+                pct = 75 + int(((i + 1) / total_ev) * 20)
+                update_job(db, job_id, stage="media", progress_pct=pct)
+            db.commit()
+
+        clip_paths = [Path(e.clip_path) for e in events if e.clip_path]
+        if clip_paths:
+            with timer.stage("supercut"):
+                supercut_path = (
+                    settings.data_dir / "supercuts" / f"video{video.id}_full.mp4"
+                )
+                try:
+                    build_supercut(clip_paths, supercut_path)
+                    db.add(
+                        Artifact(
+                            video_id=video.id,
+                            type="supercut_full",
+                            class_filter=None,
+                            path=str(supercut_path),
+                        )
+                    )
+                    db.commit()
+                except Exception as exc:
+                    media_warnings.append(f"Supercut: {exc}")
+                    logger.warning("Supercut ignorado vídeo %s: %s", video.id, exc)
+
+        if cfg.generate_reports_on_complete:
+            with timer.stage("reports"):
+                update_job(db, job_id, stage="reports", progress_pct=95)
+                try:
+                    _write_reports(db, job, video, events)
+                except Exception as exc:
+                    media_warnings.append(f"Relatórios automáticos: {exc}")
+                    logger.warning("Relatórios on-complete falharam: %s", exc)
+    finally:
+        persist_stage_timings(db, job, timer)
 
     return media_warnings
 

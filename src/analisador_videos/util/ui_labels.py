@@ -14,6 +14,7 @@ STAGE_LABELS_PT: dict[str, str] = {
     "detect": "Detecção",
     "merge": "Mesclagem",
     "media": "Mídia",
+    "supercut": "Supercut",
     "reports": "Relatórios",
     "done": "Finalizado",
 }
